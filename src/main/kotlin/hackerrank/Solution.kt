@@ -1,4 +1,6 @@
 package main.kotlin.hackerrank
+
+import java.io.File
 import java.util.*
 import kotlin.system.measureTimeMillis
 
@@ -37,10 +39,6 @@ fun debugLog(message: Any?) {
     log(message, Level.DEBUG)
 }
 
-inline fun <T> withTimeToExecution(block: () -> T): T {
-    return withTimeToExecution("Default", block)
-}
-
 inline fun <T> withTimeToExecution(operationName: String = "Default", block: () -> T): T {
     var value: T? = null
     val time = measureTimeMillis {
@@ -57,91 +55,99 @@ fun setDevelopmentFlag(args: Array<String>) {
 
 /******* utility functions *************/
 
+enum class Type {
+    StartCloud,
+    EndCloud,
+    Town
+}
+
+data class Position(val coordinate: Long, val type: Type, val value: Long, val id: Int)
 
 fun main(args: Array<String>) {
     setDevelopmentFlag(args)
-    val scan = Scanner(System.`in`)
-    val t = scan.nextLine().trim().toInt()
-    withTimeToExecution("Overall") {
-        for (tItr in 1..t) {
-            val n = scan.nextLine().trim().toInt()
-            val arr = scan.nextLine().split(" ").map { it.trim().toInt() }.toTypedArray()
-            val result = withTimeToExecution("Loop[${tItr}].equal()") { equal(arr) }
-            println(result)
+    //90394853496857 - expected
+    val scan = Scanner(File("/Users/kprajith/Desktop/REMOVE_THIS.txt"))
+//    val scan = Scanner(System.`in`)
+    val n = scan.nextLine().trim().toInt()
+    val p = scan.nextLine().split(" ").map { it.trim().toLong() }.toTypedArray()
+    val x = scan.nextLine().split(" ").map { it.trim().toLong() }.toTypedArray()
+    val m = scan.nextLine().trim().toInt()
+    val y = scan.nextLine().split(" ").map { it.trim().toLong() }.toTypedArray()
+    val r = scan.nextLine().split(" ").map { it.trim().toLong() }.toTypedArray()
+    val result = withTimeToExecution { maximumPeople(p, x, y, r, n, m) }
+    println(result)
+}
+
+fun maximumPeople(
+    people: Array<Long>,
+    towns: Array<Long>,
+    clouds: Array<Long>,
+    ranges: Array<Long>,
+    n: Int,
+    m: Int
+): Long {
+    val positions = getSortedPositions(n, towns, people, m, clouds, ranges)
+    var peopleInASunnyTown = 0L
+    val potentialSingleCloudCandidates = mutableListOf<Pair<Int, Long>>()
+    var cloudsAboveTown = mutableSetOf<Int>()
+    val positionMap = mutableMapOf<Long, Long>()
+    positions.forEach { (position, type, value, id) ->
+        //        debugLog("Position(pos: $position, type: $type, value: $value, id: $id) - overlapping count: ${cloudsAboveTown.size}" )
+        when (type) {
+            Type.StartCloud -> {
+                positionMap.merge(position, 1, Long::plus)
+                cloudsAboveTown.add(id)
+            }
+            Type.EndCloud -> {
+                positionMap.merge(position, 1, Long::plus)
+                cloudsAboveTown.remove(id)
+            }
+            Type.Town -> {
+                val count = positionMap.getOrDefault(position, 0)
+
+                when {
+                    //Sunny
+                    cloudsAboveTown.isEmpty() && count == 0L -> peopleInASunnyTown += value
+                    //Just one cloud
+                    cloudsAboveTown.size == 1 && count == 0L -> potentialSingleCloudCandidates.add(
+                        Pair(
+                            cloudsAboveTown.first(),
+                            value
+                        )
+                    )
+                    //Ending of a cloud
+                    count <= 1 && cloudsAboveTown.isEmpty() -> potentialSingleCloudCandidates.add(Pair(id, value))
+                }
+            }
         }
     }
-}
-
-fun equal(arr: Array<Int>): Int {
-    val sortedList = arr.toList().sorted()
-    debugLog(sortedList)
-    val smallest = sortedList.first()
-    val baselines = baselines(smallest)
-    var minOperations = Int.MAX_VALUE
-    baselines.forEach {
-        val mutableList = sortedList.toMutableList()
-        var operations = 0
-        while (mutableList.size > 1) {
-            val largest = mutableList.last()
-            val index = mutableList.size - 1
-            operations += countOperations(largest, it)
-            debugLog("$largest reduced to $it after $operations operations")
-            mutableList.removeAt(index)
-        }
-        minOperations = minOf(minOperations, operations)
-
-    }
-    return minOperations
+//    debugLog("peopleInASunnyTown: $peopleInASunnyTown")
+//    debugLog("potential single candidates: $potentialSingleCloudCandidates")
+    val singleCloudGrouping = potentialSingleCloudCandidates.groupBy({ it.first }, { it.second }).map { it.value.sum() }
+//    debugLog("singleCloudGrouping: $singleCloudGrouping")
+    val maxContribution = singleCloudGrouping.max() ?: 0L
+    return maxContribution + peopleInASunnyTown
 
 }
 
-fun countOperations(largest: Int, smallest: Int): Int {
-    var delta = delta(largest, smallest)
-    var itemToReduce = largest
-    var operations = 0
-    while (delta > 0) {
-        itemToReduce -= delta
-        operations++
-        delta = delta(itemToReduce, smallest)
+private fun getSortedPositions(
+    n: Int,
+    towns: Array<Long>,
+    people: Array<Long>,
+    m: Int,
+    clouds: Array<Long>,
+    ranges: Array<Long>
+): List<Position> {
+    val positions = mutableListOf<Position>()
+    for (i in 0 until n) {
+        positions.add(Position(towns[i], Type.Town, people[i], i))
     }
-    return operations
+    for (i in 0 until m) {
+        positions.add(Position(clouds[i] - ranges[i], Type.StartCloud, 0, i))
+        positions.add(Position(clouds[i] + ranges[i], Type.EndCloud, 0, i))
+    }
+    return positions.sortedWith(compareBy({ it.coordinate }, { it.type }))
 }
-
-fun delta(from: Int, to: Int): Int {
-    val x = from - to
-    return when {
-        x >= 5 -> 5
-        x >= 2 -> 2
-        x >= 1 -> 1
-        else -> x
-    }
-}
-
-fun baselines(from: Int): List<Int> {
-    val result = mutableListOf(from)
-    if (from >= 1) {
-        result.add(from - 1)
-    }
-    if (from >= 2) {
-        result.add(from - 2)
-    }
-    return result
-}
-
-
-/**
-1
-110
-53 361 188 665 786 898 447 562 272 123 229 629 670 848 994 54 822 46 208 17 449 302 466 832 931 778 156 39 31 777 749 436 138 289 453 276 539 901 839 811 24 420 440 46 269 786 101 443 832 661 460 281 964 278 465 247 408 622 638 440 751 739 876 889 380 330 517 919 583 356 83 959 129 875 5 750 662 106 193 494 120 653 128 84 283 593 683 44 567 321 484 318 412 712 559 792 394 77 711 977 785 146 936 914 22 942 664 36 400 857
-82
-
-10605
-
-! 10605
- */
-
-
-
 
 
 
