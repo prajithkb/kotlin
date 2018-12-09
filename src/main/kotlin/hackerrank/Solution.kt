@@ -1,7 +1,7 @@
 package main.kotlin.hackerrank
 
+import java.io.BufferedReader
 import java.io.File
-import java.util.*
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
@@ -79,11 +79,19 @@ fun setDevelopmentFlag(args: Array<String>) {
     devOverrides.readFromFile = args.contains("readFromFile")
 }
 
-fun scanner(): Scanner {
+
+fun scanner(): Scan {
     if (devOverrides.readFromFile) {
-        return Scanner(File("/Users/kprajith/Desktop/REMOVE_THIS.txt"))
+//        return Scanner(File("/Users/kprajith/Desktop/REMOVE_THIS.txt"))
+        return Scan(File("/Users/kprajith/Desktop/REMOVE_THIS.txt").bufferedReader())
     } else {
-        return Scanner(System.`in`)
+        return Scan(System.`in`.bufferedReader())
+    }
+}
+
+class Scan(val reader: BufferedReader) {
+    fun nextLine(): String {
+        return reader.readLine()
     }
 }
 
