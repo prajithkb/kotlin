@@ -1,4 +1,6 @@
+.DS*
 *.idea
 *.iml
-./target
-./playground/*
+target/**
+playground/**
+*.dot

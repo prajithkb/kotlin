@@ -1,0 +1,7 @@
+@startuml
+digraph G {
+"Welcome" -> "Todfd"
+"To" -> "Web"
+"To" -> "GraphViz!"
+}
+@enduml
