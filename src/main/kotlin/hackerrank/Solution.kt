@@ -82,7 +82,6 @@ fun setDevelopmentFlag(args: Array<String>) {
 
 fun scanner(): Scan {
     if (devOverrides.readFromFile) {
-//        return Scanner(File("/Users/kprajith/Desktop/REMOVE_THIS.txt"))
         return Scan(File("/Users/kprajith/Desktop/REMOVE_THIS.txt").bufferedReader())
     } else {
         return Scan(System.`in`.bufferedReader())
@@ -90,7 +89,6 @@ fun scanner(): Scan {
 }
 
 class Scan(val reader: BufferedReader) {
-
     fun nextLine(): String {
         return reader.readLine()
     }
@@ -101,44 +99,71 @@ class Scan(val reader: BufferedReader) {
 
 /******* utility functions *************/
 
+enum class MATCHTYPE {
+    UPPERCASE_MATCH,
+    MATCH,
+    MISMATCH,
+    LOWERCASE_MISMATCH
+}
+
 
 fun main(args: Array<String>) {
     setDevelopmentFlag(args)
     val scan = scanner()
-    completeWithin(5000) {
-        withTimeToExecution {
+    completeWithin(500000) {
+        withTimeToExecution("main") {
             val q = scan.nextLine().trim().toInt()
             for (qItr in 1..q) {
-                val nm = scan.nextLine().split(" ")
-                val n = nm[0].trim().toLong()
-                val m = nm[1].trim().toInt()
-                val s = scan.nextLine().split(" ").map { it.trim().toLong() }.toTypedArray()
-                val result = stoneDivision(n, s)
+                val a = scan.nextLine()
+                val b = scan.nextLine()
+                val result = abbreviation(a, b)
                 println(result)
             }
         }
+    }
 
+}
+
+// Complete the abbreviation function below.
+fun abbreviation(a: String, b: String): String {
+    val dp = Array(a.length + 1) { Array(b.length + 1) { 0 } }
+    dp[0][0] = 1
+    fillFirstColumn(dp, a)
+    for (i in 1 until dp.size) {
+        for (j in 1 until dp[0].size) {
+            if (a[i - 1] == b[j - 1]) {
+                dp[i][j] = dp[i - 1][j - 1]
+            } else if (a[i - 1].toUpperCase() == b[j - 1]) {
+                dp[i][j] = dp[i - 1][j - 1] or dp[i - 1][j]
+
+            } else if (a[i - 1].isLowerCase()) {
+                dp[i][j] = dp[i - 1][j]
+            } else if (a[i - 1].isUpperCase()) {
+                dp[i][j] = 0
+            }
+        }
+    }
+    dp.forEachIndexed { index, v ->
+        if (index == 0) {
+            debugLog("\t\t\t${b.toCharArray().joinToString("\t,")}")
+            debugLog("\t :\t${v.joinToString("\t,")}")
+        } else {
+            debugLog("\t${a[index - 1]}:\t${v.joinToString("\t,")}")
+        }
+
+    }
+    return if (dp[a.length][b.length] == 1) "YES" else "NO"
+}
+
+fun fillFirstColumn(dp: Array<Array<Int>>, a: String) {
+    var foundUpperCase = false
+    for (i in 1 until dp.size) {
+        if (a[i - 1].isLowerCase() && !foundUpperCase) {
+            dp[i][0] = 1
+        }
+        if (a[i - 1].isUpperCase()) {
+            foundUpperCase = true
+        }
     }
 }
 
-fun stoneDivision(n: Long, options: Array<Long>): Long {
-    val piles = mutableMapOf<Long, Long>()
-    return divide(piles, options, n)
-}
-
-fun divide(
-    piles: MutableMap<Long, Long>,
-    options: Array<Long>,
-    n: Long
-): Long {
-    var bestOption = 0L
-    options
-        .filter { n % it == 0L && n != it }
-        .forEach { pick ->
-            val multiplier = n / pick
-            piles[pick].whenNull { piles[pick] = divide(piles, options, pick) }
-            piles[pick].whenNotNull { bestOption = maxOf(1 + it * multiplier, bestOption) }
-        }
-    piles[n] = bestOption
-    return bestOption
-}
