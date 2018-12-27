@@ -98,72 +98,75 @@ class Scan(val reader: BufferedReader) {
 
 
 /******* utility functions *************/
-
-enum class MATCHTYPE {
-    UPPERCASE_MATCH,
-    MATCH,
-    MISMATCH,
-    LOWERCASE_MISMATCH
-}
-
+val BITMASK = (1 shl 10) - 1
 
 fun main(args: Array<String>) {
     setDevelopmentFlag(args)
     val scan = scanner()
-    completeWithin(500000) {
+    completeWithin(5000) {
         withTimeToExecution("main") {
-            val q = scan.nextLine().trim().toInt()
-            for (qItr in 1..q) {
-                val a = scan.nextLine()
-                val b = scan.nextLine()
-                val result = abbreviation(a, b)
-                println(result)
+            val n = scan.nextLine().trim().toInt()
+
+            val tickets = Array(n) { "" }
+            for (i in 0 until n) {
+                val ticketsItem = scan.nextLine()
+                tickets[i] = ticketsItem
+            }
+            val result = winningLotteryTicket(tickets)
+            println(result)
+        }
+    }
+
+}
+
+fun winningLotteryTicket(tickets: Array<String>): Long {
+    val sortedTickets = distinctTicketsCount(tickets)
+//    debugLog { "sortedTickets\n" + sortedTickets.entries.joinToString("\n") { "${it.key}|${it.key.toString(2)}:${it.value}" } }
+    return countPairs(sortedTickets, BITMASK)
+}
+
+private fun distinctTicketsCount(tickets: Array<String>): Map<Int, Int> {
+    return tickets
+        .map { it.trim() }
+        .map { ticket ->
+            var bits = 0
+            val sortedChars = ticket.split("").filter { it != "" }.toSortedSet()
+            sortedChars.map { it.toInt() }.map { int ->
+                bits = bits or (1 shl int)
+            }
+            bits
+        }.groupingBy { it }.eachCount()
+}
+
+fun countPairs(sortedTickets: Map<Int, Int>, bitmask: Int): Long {
+    val setBitsMap = createSetBitsCountMap(sortedTickets)
+    var sum = sortedTickets.entries.map { (k, v) ->
+        val complement = bitmask xor k
+        val c = setBitsMap.getOrDefault(complement, 0)
+//        debugLog { "${k.toString(2)}|$k Complement $complement|${complement.toString(2)}, $c" }
+        c * v
+    }.sum()
+    setBitsMap[1023].whenNotNull {
+        sum -= it
+    }
+    return sum / 2
+}
+
+private fun createSetBitsCountMap(
+    sortedTickets: Map<Int, Int>
+): MutableMap<Int, Long> {
+    val setBitsMap = mutableMapOf<Int, Long>()
+    for (i in 0..1023) {
+        sortedTickets.entries.forEach { (key, value) ->
+            if (i.and(key) == i) {
+                val count = setBitsMap.getOrDefault(i, 0L)
+                setBitsMap[i] = count + value
             }
         }
     }
-
+    return setBitsMap
 }
 
-// Complete the abbreviation function below.
-fun abbreviation(a: String, b: String): String {
-    val dp = Array(a.length + 1) { Array(b.length + 1) { 0 } }
-    dp[0][0] = 1
-    fillFirstColumn(dp, a)
-    for (i in 1 until dp.size) {
-        for (j in 1 until dp[0].size) {
-            if (a[i - 1] == b[j - 1]) {
-                dp[i][j] = dp[i - 1][j - 1]
-            } else if (a[i - 1].toUpperCase() == b[j - 1]) {
-                dp[i][j] = dp[i - 1][j - 1] or dp[i - 1][j]
 
-            } else if (a[i - 1].isLowerCase()) {
-                dp[i][j] = dp[i - 1][j]
-            } else if (a[i - 1].isUpperCase()) {
-                dp[i][j] = 0
-            }
-        }
-    }
-    dp.forEachIndexed { index, v ->
-        if (index == 0) {
-            debugLog("\t\t\t${b.toCharArray().joinToString("\t,")}")
-            debugLog("\t :\t${v.joinToString("\t,")}")
-        } else {
-            debugLog("\t${a[index - 1]}:\t${v.joinToString("\t,")}")
-        }
 
-    }
-    return if (dp[a.length][b.length] == 1) "YES" else "NO"
-}
-
-fun fillFirstColumn(dp: Array<Array<Int>>, a: String) {
-    var foundUpperCase = false
-    for (i in 1 until dp.size) {
-        if (a[i - 1].isLowerCase() && !foundUpperCase) {
-            dp[i][0] = 1
-        }
-        if (a[i - 1].isUpperCase()) {
-            foundUpperCase = true
-        }
-    }
-}
 
