@@ -98,75 +98,25 @@ class Scan(val reader: BufferedReader) {
 
 
 /******* utility functions *************/
-val BITMASK = (1 shl 10) - 1
-
 fun main(args: Array<String>) {
     setDevelopmentFlag(args)
     val scan = scanner()
     completeWithin(5000) {
         withTimeToExecution("main") {
-            val n = scan.nextLine().trim().toInt()
-
-            val tickets = Array(n) { "" }
-            for (i in 0 until n) {
-                val ticketsItem = scan.nextLine()
-                tickets[i] = ticketsItem
-            }
-            val result = winningLotteryTicket(tickets)
+            val arrCount = scan.nextLine().trim().toInt()
+            val arr = scan.nextLine().split(" ").map { it.trim().toInt() }.toTypedArray()
+            val result = chocolateInBox(arr)
             println(result)
         }
     }
 
 }
 
-fun winningLotteryTicket(tickets: Array<String>): Long {
-    val sortedTickets = distinctTicketsCount(tickets)
-//    debugLog { "sortedTickets\n" + sortedTickets.entries.joinToString("\n") { "${it.key}|${it.key.toString(2)}:${it.value}" } }
-    return countPairs(sortedTickets, BITMASK)
+/*
+ * Complete the chocolateInBox function below.
+ */
+fun chocolateInBox(arr: Array<Int>): Int {
+    val nimSum = arr.fold(0) { i, acc -> acc xor i }
+    debugLog("nim sum : $nimSum")
+    return arr.filter { (nimSum xor it) < it }.count()
 }
-
-private fun distinctTicketsCount(tickets: Array<String>): Map<Int, Int> {
-    return tickets
-        .map { it.trim() }
-        .map { ticket ->
-            var bits = 0
-            val sortedChars = ticket.split("").filter { it != "" }.toSortedSet()
-            sortedChars.map { it.toInt() }.map { int ->
-                bits = bits or (1 shl int)
-            }
-            bits
-        }.groupingBy { it }.eachCount()
-}
-
-fun countPairs(sortedTickets: Map<Int, Int>, bitmask: Int): Long {
-    val setBitsMap = createSetBitsCountMap(sortedTickets)
-    var sum = sortedTickets.entries.map { (k, v) ->
-        val complement = bitmask xor k
-        val c = setBitsMap.getOrDefault(complement, 0)
-//        debugLog { "${k.toString(2)}|$k Complement $complement|${complement.toString(2)}, $c" }
-        c * v
-    }.sum()
-    setBitsMap[1023].whenNotNull {
-        sum -= it
-    }
-    return sum / 2
-}
-
-private fun createSetBitsCountMap(
-    sortedTickets: Map<Int, Int>
-): MutableMap<Int, Long> {
-    val setBitsMap = mutableMapOf<Int, Long>()
-    for (i in 0..1023) {
-        sortedTickets.entries.forEach { (key, value) ->
-            if (i.and(key) == i) {
-                val count = setBitsMap.getOrDefault(i, 0L)
-                setBitsMap[i] = count + value
-            }
-        }
-    }
-    return setBitsMap
-}
-
-
-
-
