@@ -1,7 +1,9 @@
 package main.kotlin.hackerrank
 
 import java.io.BufferedReader
+import java.io.BufferedWriter
 import java.io.File
+import java.io.OutputStreamWriter
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
@@ -92,31 +94,91 @@ class Scan(val reader: BufferedReader) {
     fun nextLine(): String {
         return reader.readLine()
     }
-
-
 }
+
+val writer = BufferedWriter(OutputStreamWriter(System.out))
+fun println(message: Any) {
+    writer.write(message.toString())
+    writer.newLine()
+}
+
+inline fun sandbox(crossinline block: () -> Any) {
+    writer.use {
+        completeWithin(5000) {
+            withTimeToExecution("main") {
+                block()
+            }
+        }
+    }
+}
+
+data class Node(var id: Int, val children: MutableList<Int> = mutableListOf(), var reducedValue: Int = 0)
+
+fun createTree(n: Int, scan: Scan): Array<Node> {
+    val tree = Array(n + 1) { i -> Node(i) }
+    for (treeRowItr in 0 until n - 1) {
+        val (from, to) = scan.nextLine().split(" ").map { it.trim().toInt() }.toTypedArray()
+        tree[from].children.add(tree[to].id)
+        tree[to].children.add(tree[from].id)
+    }
+    return tree
+}
+
+fun bfs(root: Node, nodes: Array<Node>) {
+    val visited = Array(nodes.size) { false }
+    bfs(root, nodes, visited)
+}
+
+fun bfs(root: Node, nodes: Array<Node>, visited: Array<Boolean>): Int {
+    var edges = 0
+    visited[root.id] = true
+    root.children.filter { !visited[it] }.forEach { id ->
+        edges += bfs(nodes[id], nodes, visited) + 1
+    }
+    return edges
+}
+
 
 
 /******* utility functions *************/
+
+
 fun main(args: Array<String>) {
     setDevelopmentFlag(args)
     val scan = scanner()
-    completeWithin(5000) {
-        withTimeToExecution("main") {
-            val arrCount = scan.nextLine().trim().toInt()
-            val arr = scan.nextLine().split(" ").map { it.trim().toInt() }.toTypedArray()
-            val result = chocolateInBox(arr)
-            println(result)
+    sandbox {
+        val t = scan.nextLine().trim().toInt()
+        for (tItr in 1..t) {
+            val n = scan.nextLine().trim().toInt()
+            val tree = createTree(n, scan)
+            val result = deforestation(n, tree)
+            log(result)
         }
     }
-
 }
 
-/*
- * Complete the chocolateInBox function below.
- */
-fun chocolateInBox(arr: Array<Int>): Int {
-    val nimSum = arr.fold(0) { i, acc -> acc xor i }
-    debugLog("nim sum : $nimSum")
-    return arr.filter { (nimSum xor it) < it }.count()
+
+fun reduce(root: Node, nodes: Array<Node>) {
+    val visited = Array(nodes.size) { false }
+    reduce(root, nodes, visited)
 }
+
+fun reduce(root: Node, nodes: Array<Node>, visited: Array<Boolean>): Int {
+    visited[root.id] = true
+    var reducedValue = 0
+    root.children.filter { !visited[it] }.forEach { id ->
+        val newRoot = nodes[id]
+        val reduceValueForChild = 1 + reduce(newRoot, nodes, visited)
+        reducedValue = reducedValue xor reduceValueForChild
+    }
+    root.reducedValue = reducedValue
+    return reducedValue
+}
+
+fun deforestation(n: Int, tree: Array<Node>): String {
+    reduce(tree[1], tree)
+//    debugLog(tree.joinToString("\n"))
+    val aliceWins = tree[1].reducedValue != 0
+    return if (aliceWins) "Alice" else "Bob"
+}
+
