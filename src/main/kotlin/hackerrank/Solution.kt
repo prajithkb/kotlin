@@ -112,14 +112,20 @@ inline fun sandbox(crossinline block: () -> Any) {
     }
 }
 
-data class Node(var id: Int, val children: MutableList<Int> = mutableListOf(), var reducedValue: Int = 0)
+data class Node(
+    var id: Int,
+    val children: MutableList<Int> = mutableListOf(),
+    var nimber: Int = 0,
+    val childNimbers: MutableList<Int> = mutableListOf(),
+    var visited: Boolean = false
+)
 
-fun createTree(n: Int, scan: Scan): Array<Node> {
-    val tree = Array(n + 1) { i -> Node(i) }
-    for (treeRowItr in 0 until n - 1) {
+fun createTree(numberOfNodes: Int, numberOfEdges: Int, scan: Scan): Array<Node> {
+    val tree = Array(numberOfNodes + 1) { i -> Node(i) }
+    for (treeRowItr in 1..numberOfEdges) {
         val (from, to) = scan.nextLine().split(" ").map { it.trim().toInt() }.toTypedArray()
         tree[from].children.add(tree[to].id)
-        tree[to].children.add(tree[from].id)
+//        tree[to].children.add(tree[from].id)
     }
     return tree
 }
@@ -132,12 +138,11 @@ fun bfs(root: Node, nodes: Array<Node>) {
 fun bfs(root: Node, nodes: Array<Node>, visited: Array<Boolean>): Int {
     var edges = 0
     visited[root.id] = true
-    root.children.filter { !visited[it] }.forEach { id ->
-        edges += bfs(nodes[id], nodes, visited) + 1
+    root.children.filter { !visited[it] }.map { nodes[it] }.forEach { node ->
+        edges += bfs(node, nodes, visited) + 1
     }
     return edges
 }
-
 
 
 /******* utility functions *************/
@@ -147,38 +152,51 @@ fun main(args: Array<String>) {
     setDevelopmentFlag(args)
     val scan = scanner()
     sandbox {
-        val t = scan.nextLine().trim().toInt()
-        for (tItr in 1..t) {
-            val n = scan.nextLine().trim().toInt()
-            val tree = createTree(n, scan)
-            val result = deforestation(n, tree)
-            log(result)
+        val nm = scan.nextLine().split(" ")
+        val n = nm[0].trim().toInt()
+        val m = nm[1].trim().toInt()
+        val tree = createTree(n + 1, m, scan)
+        tree.filter { !it.visited }.forEach { bfsAndCalculateNimber(it, tree) }
+//        debugLog { tree.joinToString("\n") }
+        val q = scan.nextLine().trim().toInt()
+        for (qItr in 1..q) {
+            val queryCount = scan.nextLine().trim().toInt()
+            val query = scan.nextLine().split(" ").map { it.trim().toInt() }.toTypedArray()
+            val result = bendersPlay(n, tree, query)
+            println(result)
         }
     }
 }
 
-
-fun reduce(root: Node, nodes: Array<Node>) {
-    val visited = Array(nodes.size) { false }
-    reduce(root, nodes, visited)
-}
-
-fun reduce(root: Node, nodes: Array<Node>, visited: Array<Boolean>): Int {
-    visited[root.id] = true
-    var reducedValue = 0
-    root.children.filter { !visited[it] }.forEach { id ->
-        val newRoot = nodes[id]
-        val reduceValueForChild = 1 + reduce(newRoot, nodes, visited)
-        reducedValue = reducedValue xor reduceValueForChild
+fun grundyNumber(list: List<Int>): Int {
+    var possibleGrundyNumber = 0
+    val sortedSet = list.toSortedSet()
+    while (sortedSet.contains(possibleGrundyNumber)) {
+        possibleGrundyNumber++
     }
-    root.reducedValue = reducedValue
-    return reducedValue
+//    debugLog("set: $sortedSet, grundyNumber: $possibleGrundyNumber")
+    return possibleGrundyNumber
 }
 
-fun deforestation(n: Int, tree: Array<Node>): String {
-    reduce(tree[1], tree)
-//    debugLog(tree.joinToString("\n"))
-    val aliceWins = tree[1].reducedValue != 0
-    return if (aliceWins) "Alice" else "Bob"
+
+fun bfsAndCalculateNimber(root: Node, nodes: Array<Node>): Int {
+    val nimbers = mutableListOf<Int>()
+    if (!root.visited) {
+        root.children.map { nodes[it] }.forEach { node ->
+            if (node.visited) {
+                nimbers.add(node.nimber)
+            } else {
+                nimbers.add(bfsAndCalculateNimber(node, nodes))
+            }
+        }
+        root.childNimbers.addAll(nimbers)
+        root.nimber = grundyNumber(nimbers)
+        root.visited = true
+    }
+    return root.nimber
 }
 
+fun bendersPlay(n: Int, tree: Array<Node>, query: Array<Int>): String {
+    val nimSum = query.map { tree[it].nimber }.fold(0) { i, acc -> acc xor i }
+    return if (nimSum == 0) "Iroh" else "Bumi"
+}
