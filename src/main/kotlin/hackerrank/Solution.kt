@@ -4,6 +4,7 @@ import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.File
 import java.io.OutputStreamWriter
+import java.math.BigInteger
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
@@ -102,9 +103,9 @@ fun println(message: Any) {
     writer.newLine()
 }
 
-inline fun sandbox(crossinline block: () -> Any) {
+inline fun sandbox(within: Long = 5000, crossinline block: () -> Any) {
     writer.use {
-        completeWithin(5000) {
+        completeWithin(within) {
             withTimeToExecution("main") {
                 block()
             }
@@ -130,73 +131,137 @@ fun createTree(numberOfNodes: Int, numberOfEdges: Int, scan: Scan): Array<Node> 
     return tree
 }
 
-fun bfs(root: Node, nodes: Array<Node>) {
-    val visited = Array(nodes.size) { false }
-    bfs(root, nodes, visited)
+fun Array<Node>.bfs(root: Node) {
+    val visited = Array(this.size) { false }
+    bfs(root, visited)
 }
 
-fun bfs(root: Node, nodes: Array<Node>, visited: Array<Boolean>): Int {
+fun Array<Node>.bfs(root: Node, visited: Array<Boolean>): Int {
     var edges = 0
     visited[root.id] = true
-    root.children.filter { !visited[it] }.map { nodes[it] }.forEach { node ->
-        edges += bfs(node, nodes, visited) + 1
+    root.children.filter { !visited[it] }.map { this[it] }.forEach { node ->
+        edges += bfs(node, visited) + 1
     }
     return edges
+}
+
+fun List<Int>.grundyNumber(): Int {
+    var possibleGrundyNumber = 0
+    val sortedSet = this.toSortedSet()
+    while (sortedSet.contains(possibleGrundyNumber)) {
+        possibleGrundyNumber++
+    }
+    return possibleGrundyNumber
+}
+
+fun List<Int>.nimSum(): Int {
+    return this.fold(0) { i, acc -> acc xor i }
+}
+
+fun Long.modPow(power: Int, mod: Long): Long {
+    // Initialize result
+    var res = 1L
+    var y = power.toLong()
+    // Update x if it is more
+    // than or equal to p
+    var x = this % mod
+    while (y > 0) {
+        // If y is odd, multiply x
+        // with result
+        if ((y and 1) == 1L)
+            res = (res * x) % mod
+
+        // y must be even now
+        // y = y / 2
+        y = y shr 1
+        x = (x * x) % mod
+    }
+    return res
+
 }
 
 
 /******* utility functions *************/
 
+val mod = 1000000007L
+
+val MOD = BigInteger(mod.toString())
 
 fun main(args: Array<String>) {
     setDevelopmentFlag(args)
     val scan = scanner()
-    sandbox {
-        val nm = scan.nextLine().split(" ")
-        val n = nm[0].trim().toInt()
-        val m = nm[1].trim().toInt()
-        val tree = createTree(n + 1, m, scan)
-        tree.filter { !it.visited }.forEach { bfsAndCalculateNimber(it, tree) }
-//        debugLog { tree.joinToString("\n") }
-        val q = scan.nextLine().trim().toInt()
-        for (qItr in 1..q) {
-            val queryCount = scan.nextLine().trim().toInt()
-            val query = scan.nextLine().split(" ").map { it.trim().toInt() }.toTypedArray()
-            val result = bendersPlay(n, tree, query)
-            println(result)
+    val a = scan.nextLine()
+    val b = scan.nextLine()
+    sandbox(5000) {
+        //        withTimeToExecution("xorAndSum") {
+//            println(xorAndSum(a, b))
+//        }
+        withTimeToExecution("xorAndSumOptimal") {
+            println(xorAndSumOptimal(a, b))
         }
     }
 }
 
-fun grundyNumber(list: List<Int>): Int {
-    var possibleGrundyNumber = 0
-    val sortedSet = list.toSortedSet()
-    while (sortedSet.contains(possibleGrundyNumber)) {
-        possibleGrundyNumber++
+const val limit = 314159
+
+fun xorAndSum(a: String, b: String): Long {
+    val A = BigInteger(a, 2)
+    val B = BigInteger(b, 2)
+    var sum = BigInteger("0", 2)
+    for (i in 0..limit) {
+        val xorI = A.xor(B.shiftLeft(i))
+//        debugLog("A:${A.toString(2)}|Bshli:${B.shiftLeft(i).toString(2)}|xor:${xorI.toString(2)}, $xorI")
+        sum = sum.add(xorI)
+//        sum = sum.mod(MOD)
     }
-//    debugLog("set: $sortedSet, grundyNumber: $possibleGrundyNumber")
-    return possibleGrundyNumber
+    return sum.mod(MOD).toLong()
 }
 
-
-fun bfsAndCalculateNimber(root: Node, nodes: Array<Node>): Int {
-    val nimbers = mutableListOf<Int>()
-    if (!root.visited) {
-        root.children.map { nodes[it] }.forEach { node ->
-            if (node.visited) {
-                nimbers.add(node.nimber)
-            } else {
-                nimbers.add(bfsAndCalculateNimber(node, nodes))
-            }
+fun xorAndSumOptimal(a: String, b: String): Long {
+    val reversedA = a.reversed()
+    val reversedB = b.reversed()
+    val totalLength = if (reversedA.length > (reversedB.length + limit)) reversedA.length else reversedB.length + limit
+    var sum = 0L
+    val indexes = Array(totalLength) { 0L }
+    val countOfOnes = Array(totalLength) { 0L }
+    populateCountOfOnes(countOfOnes, reversedB)
+    val binaryChars = Array(totalLength) { '0' }
+    reversedA.forEachIndexed { index, c ->
+        binaryChars[index] = c
+    }
+//    debugLog(binaryChars.joinToString(""))
+    for (index in 0 until totalLength) {
+        val c = binaryChars[index]
+        val i = if (c == '1') {
+            limit - countOfOnesWithIn(limit, countOfOnes, index) + 1
+        } else {
+            countOfOnesWithIn(limit, countOfOnes, index)
         }
-        root.childNimbers.addAll(nimbers)
-        root.nimber = grundyNumber(nimbers)
-        root.visited = true
+        indexes[index] = i
+        sum += 2L.modPow(index, mod) * i
+        sum %= mod
     }
-    return root.nimber
+//    debugLog(indexes.withIndex().joinToString { "${it.value}*2^${it.index}" })
+    return sum
 }
 
-fun bendersPlay(n: Int, tree: Array<Node>, query: Array<Int>): String {
-    val nimSum = query.map { tree[it].nimber }.fold(0) { i, acc -> acc xor i }
-    return if (nimSum == 0) "Iroh" else "Bumi"
+fun countOfOnesWithIn(limit: Int, countOfOnes: Array<Long>, index: Int): Long {
+    return if (limit >= index) {
+        countOfOnes[index]
+    } else {
+        countOfOnes[index] - countOfOnes[index - limit - 1]
+    }
+}
+
+private fun populateCountOfOnes(countOfOnes: Array<Long>, reversedB: String) {
+    if (reversedB.first() == '1') {
+        countOfOnes[0] = 1
+    }
+    countOfOnes.withIndex().filter { it.index > 0 }.forEach { (index, _) ->
+        if (index < reversedB.length && reversedB[index] == '1') {
+            countOfOnes[index] = countOfOnes[index - 1] + 1
+        } else {
+            countOfOnes[index] = countOfOnes[index - 1]
+        }
+    }
 }
