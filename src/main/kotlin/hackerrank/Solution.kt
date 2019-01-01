@@ -4,7 +4,6 @@ import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.File
 import java.io.OutputStreamWriter
-import java.math.BigInteger
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
@@ -14,8 +13,9 @@ import kotlin.system.measureTimeMillis
 
 data class DevOverrides(var isDebug: Boolean, var readFromFile: Boolean)
 
-
 val devOverrides = DevOverrides(false, false)
+
+/** Non null ***/
 
 inline fun <T : Any> T?.whenNotNull(f: (it: T) -> Unit) {
     if (this != null) f(this)
@@ -24,6 +24,8 @@ inline fun <T : Any> T?.whenNotNull(f: (it: T) -> Unit) {
 inline fun <T : Any> T?.whenNull(f: () -> Unit) {
     if (this == null) f()
 }
+
+/** Logging ***/
 
 enum class Level {
     ERROR,
@@ -57,6 +59,8 @@ inline fun debugLog(level: Level = Level.DEBUG, block: () -> Any) {
 
 }
 
+/** Timed execution ****/
+
 inline fun <T> withTimeToExecution(operationName: String = "Overall", block: () -> T): T {
     var value: T? = null
     val time = measureTimeMillis {
@@ -77,11 +81,14 @@ fun <T> completeWithin(timeoutInMilliSecs: Long = 5000, block: () -> T): T? {
     }
 }
 
+
 fun setDevelopmentFlag(args: Array<String>) {
     devOverrides.isDebug = args.contains("test")
     devOverrides.readFromFile = args.contains("readFromFile")
 }
 
+
+/*** Read and Write ****/
 
 fun scanner(): Scan {
     if (devOverrides.readFromFile) {
@@ -103,15 +110,22 @@ fun println(message: Any) {
     writer.newLine()
 }
 
-inline fun sandbox(within: Long = 5000, crossinline block: () -> Any) {
-    writer.use {
-        completeWithin(within) {
-            withTimeToExecution("main") {
-                block()
+val isDebug =
+    java.lang.management.ManagementFactory.getRuntimeMXBean().inputArguments.toString().indexOf("-agentlib:jdwp") > 0
+val defaultTimeOut = if (isDebug) 50000000L else 5000L
+inline fun sandbox(within: Long = defaultTimeOut, crossinline block: () -> Any) {
+    val within =
+        writer.use {
+            completeWithin(within) {
+                withTimeToExecution("main") {
+                    block()
+                }
             }
         }
-    }
 }
+
+/** Graphs ***/
+
 
 data class Node(
     var id: Int,
@@ -126,7 +140,6 @@ fun createTree(numberOfNodes: Int, numberOfEdges: Int, scan: Scan): Array<Node> 
     for (treeRowItr in 1..numberOfEdges) {
         val (from, to) = scan.nextLine().split(" ").map { it.trim().toInt() }.toTypedArray()
         tree[from].children.add(tree[to].id)
-//        tree[to].children.add(tree[from].id)
     }
     return tree
 }
@@ -144,6 +157,8 @@ fun Array<Node>.bfs(root: Node, visited: Array<Boolean>): Int {
     }
     return edges
 }
+
+/** Game theory ***/
 
 fun List<Int>.grundyNumber(): Int {
     var possibleGrundyNumber = 0
@@ -180,88 +195,144 @@ fun Long.modPow(power: Int, mod: Long): Long {
 
 }
 
+fun <T> Array<T>.from(index: Int): List<IndexedValue<T>> {
+    return this.withIndex().filter { it.index >= index }
+}
 
-/******* utility functions *************/
+fun <T> List<T>.from(index: Int): List<IndexedValue<T>> {
+    return this.withIndex().filter { it.index >= index }
+}
 
-val mod = 1000000007L
 
-val MOD = BigInteger(mod.toString())
+/******* utility functions ( above) *************/
+
 
 fun main(args: Array<String>) {
     setDevelopmentFlag(args)
     val scan = scanner()
-    val a = scan.nextLine()
-    val b = scan.nextLine()
-    sandbox(5000) {
-        //        withTimeToExecution("xorAndSum") {
-//            println(xorAndSum(a, b))
-//        }
-        withTimeToExecution("xorAndSumOptimal") {
-            println(xorAndSumOptimal(a, b))
+    sandbox {
+        val q = scan.nextLine().trim().toInt()
+        for (qItr in 1..q) {
+            val nm = scan.nextLine().split(" ")
+            val n = nm[0].trim().toInt()
+            val m = nm[1].trim().toLong()
+            val a = scan.nextLine().split(" ").map { it.trim().toLong() }.toTypedArray()
+            withTimeToExecution("suboptimalSum") {
+                //                log(suboptimalSum(a, m))
+            }
+
+            withTimeToExecution("optimalSum") {
+                log(optimalSum(a, m))
+            }
+
+        }
+
+    }
+}
+
+fun suboptimalSum(a: Array<Long>, m: Long): Long {
+    val cumulativeSum = Array(a.size + 1) { 0L }
+    cumulativeSum[1] = a[0]
+    a.from(1).forEach { (index, value) ->
+        cumulativeSum[index + 1] = cumulativeSum[index] + value
+    }
+//    debugLog(cumulativeSum.joinToString())
+    var leftAndRightIndex = 0 to 0
+    var maximumSum = 0L
+    for (i in 0 until cumulativeSum.size) {
+        for (j in i + 1 until cumulativeSum.size) {
+            val mod = (cumulativeSum[j] - cumulativeSum[i]) % m
+            if (mod > maximumSum) {
+                maximumSum = mod
+//                debugLog("prev l-r: $leftAndRightIndex")
+                leftAndRightIndex = i - 1 to j - 1
+
+            }
         }
     }
+//    debugLog("left - right : $leftAndRightIndex")
+    //1398956404
+    return maximumSum
 }
 
-const val limit = 314159
+fun optimalSum(a: Array<Long>, m: Long): Long {
+    val cumulativeSum = cumulativeSum(a)
+    val indexedCumulativeSum = cumulativeSum.map { it % m }.withIndex().sortedBy { it.value }
+    val closestPair = closestPair(indexedCumulativeSum)
+    val farthestPair = farthestPair(indexedCumulativeSum)
+    val c = cumulativeSum[closestPair.second] - cumulativeSum[closestPair.first]
+    val f = cumulativeSum[farthestPair.second] - cumulativeSum[farthestPair.first]
 
-fun xorAndSum(a: String, b: String): Long {
-    val A = BigInteger(a, 2)
-    val B = BigInteger(b, 2)
-    var sum = BigInteger("0", 2)
-    for (i in 0..limit) {
-        val xorI = A.xor(B.shiftLeft(i))
-//        debugLog("A:${A.toString(2)}|Bshli:${B.shiftLeft(i).toString(2)}|xor:${xorI.toString(2)}, $xorI")
-        sum = sum.add(xorI)
-//        sum = sum.mod(MOD)
-    }
-    return sum.mod(MOD).toLong()
+//    debugLog("negativeIndexPair : $closestPair | ${(cumulativeSum[closestPair.second]- cumulativeSum[closestPair.first]) % m}")
+//    debugLog("positiveIndexPair : $farthestPair | ${(cumulativeSum[farthestPair.second]- cumulativeSum[farthestPair.first]) % m}")
+    return if (c % m > f % m) c % m else f % m
+    //1398956404
 }
 
-fun xorAndSumOptimal(a: String, b: String): Long {
-    val reversedA = a.reversed()
-    val reversedB = b.reversed()
-    val totalLength = if (reversedA.length > (reversedB.length + limit)) reversedA.length else reversedB.length + limit
-    var sum = 0L
-    val indexes = Array(totalLength) { 0L }
-    val countOfOnes = Array(totalLength) { 0L }
-    populateCountOfOnes(countOfOnes, reversedB)
-    val binaryChars = Array(totalLength) { '0' }
-    reversedA.forEachIndexed { index, c ->
-        binaryChars[index] = c
+fun closestPair(indexedCumulativeSum: List<IndexedValue<Long>>): Pair<Int, Int> {
+    val minDifferences = indexedCumulativeSum.from(1)
+        .map { (index, indexedValue) -> Pair(indexedCumulativeSum[index - 1], indexedValue) }
+        .filter { (prev, current) -> prev.index > current.index }
+        .map { (prev, current) ->
+            Pair(Pair(current.index, prev.index), prev.value - current.value)
+        }
+        .sortedBy { it.second }
+    return minDifferences.last().first
+}
+
+
+fun farthestPair(indexedCumulativeSum: List<IndexedValue<Long>>): Pair<Int, Int> {
+    var l = 0
+    var r = indexedCumulativeSum.size - 1
+    while (indexedCumulativeSum[l].index > indexedCumulativeSum[r].index) {
+        r--
+        if (r == 0) {
+            l++
+            r = indexedCumulativeSum.size - 1
+        }
     }
-//    debugLog(binaryChars.joinToString(""))
-    for (index in 0 until totalLength) {
-        val c = binaryChars[index]
-        val i = if (c == '1') {
-            limit - countOfOnesWithIn(limit, countOfOnes, index) + 1
+    return indexedCumulativeSum[l].index to indexedCumulativeSum[r].index
+}
+
+private fun cumulativeSum(a: Array<Long>): Array<Long> {
+    val cumulativeSum = Array(a.size + 1) { 0L }
+    cumulativeSum[1] = a[0]
+    a.from(1).forEach { (index, value) ->
+        cumulativeSum[index + 1] = cumulativeSum[index] + value
+    }
+    return cumulativeSum
+}
+
+fun maximumSum(a: Array<Long>, m: Long): Long {
+    val arrayWithMod = a.map { it % m }
+    var leftIndex = 0
+    var rightIndex = 0
+    var maximumSum = 0L
+    var sumTillNow = 0L
+    var leftAndRightIndex = 0 to 0
+    while (leftIndex < arrayWithMod.size) {
+        if (sumTillNow < m && rightIndex < arrayWithMod.size) {
+            sumTillNow += arrayWithMod[rightIndex]
+            rightIndex++
         } else {
-            countOfOnesWithIn(limit, countOfOnes, index)
+            while (sumTillNow >= m && leftIndex <= rightIndex) {
+                sumTillNow -= arrayWithMod[leftIndex]
+                leftIndex++
+            }
+            if (rightIndex == arrayWithMod.size) {
+                leftIndex++
+            }
         }
-        indexes[index] = i
-        sum += 2L.modPow(index, mod) * i
-        sum %= mod
-    }
-//    debugLog(indexes.withIndex().joinToString { "${it.value}*2^${it.index}" })
-    return sum
-}
+        if (sumTillNow in (maximumSum + 1)..(m - 1)) {
+            maximumSum = sumTillNow
+            debugLog("prev l-r: $leftAndRightIndex")
+            leftAndRightIndex = leftIndex to rightIndex
 
-fun countOfOnesWithIn(limit: Int, countOfOnes: Array<Long>, index: Int): Long {
-    return if (limit >= index) {
-        countOfOnes[index]
-    } else {
-        countOfOnes[index] - countOfOnes[index - limit - 1]
-    }
-}
-
-private fun populateCountOfOnes(countOfOnes: Array<Long>, reversedB: String) {
-    if (reversedB.first() == '1') {
-        countOfOnes[0] = 1
-    }
-    countOfOnes.withIndex().filter { it.index > 0 }.forEach { (index, _) ->
-        if (index < reversedB.length && reversedB[index] == '1') {
-            countOfOnes[index] = countOfOnes[index - 1] + 1
-        } else {
-            countOfOnes[index] = countOfOnes[index - 1]
         }
     }
+    debugLog("left - right : $leftAndRightIndex")
+    return maximumSum
 }
+
+
+
