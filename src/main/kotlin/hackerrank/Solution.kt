@@ -4,6 +4,7 @@ import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.File
 import java.io.OutputStreamWriter
+import java.util.*
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
@@ -14,8 +15,6 @@ import kotlin.system.measureTimeMillis
 data class DevOverrides(var isDebug: Boolean, var readFromFile: Boolean)
 
 val devOverrides = DevOverrides(false, false)
-
-/** Non null ***/
 
 inline fun <T : Any> T?.whenNotNull(f: (it: T) -> Unit) {
     if (this != null) f(this)
@@ -98,7 +97,7 @@ fun scanner(): Scan {
     }
 }
 
-class Scan(val reader: BufferedReader) {
+class Scan(private val reader: BufferedReader) {
     fun nextLine(): String {
         return reader.readLine()
     }
@@ -106,8 +105,9 @@ class Scan(val reader: BufferedReader) {
 
 val writer = BufferedWriter(OutputStreamWriter(System.out))
 fun println(message: Any) {
-    writer.write(message.toString())
-    writer.newLine()
+    kotlin.io.println(message)
+//    writer.write(message.toString())
+//    writer.newLine()
 }
 
 val isDebug =
@@ -130,32 +130,91 @@ inline fun sandbox(within: Long = defaultTimeOut, crossinline block: () -> Any) 
 data class Node(
     var id: Int,
     val children: MutableList<Int> = mutableListOf(),
-    var nimber: Int = 0,
-    val childNimbers: MutableList<Int> = mutableListOf(),
-    var visited: Boolean = false
+    var parent: Int = -1,
+    var isLeaf: Boolean = false
 )
 
-fun createTree(numberOfNodes: Int, numberOfEdges: Int, scan: Scan): Array<Node> {
-    val tree = Array(numberOfNodes + 1) { i -> Node(i) }
+class Graph(
+    val numberOfNodes: Int,
+    private val nodes: Array<Node> = Array(numberOfNodes + 1) { i -> Node(i) },
+    private var root: Int = 1
+) {
+
+    fun root(): Node {
+        return nodes[root]
+    }
+
+    fun setRoot(root: Int) {
+        this.root = root
+    }
+
+    operator fun get(id: Int): Node {
+        return nodes[id]
+    }
+
+    fun connect(from: Int, to: Int) {
+        nodes[from].children.add(nodes[to].id)
+        nodes[to].children.add(nodes[from].id)
+    }
+
+    fun bfs(root: Node): Int {
+        return bfs(root, Array(numberOfNodes + 1) { false })
+    }
+
+    fun bfs(root: Node, visited: Array<Boolean>): Int {
+        var edges = 0
+        visited[root.id] = true
+        root.children
+            .filter { !visited[it] }
+            .map { this.nodes[it] }.forEach { node ->
+                edges += bfs(node, visited) + 1
+            }
+        return edges
+    }
+
+    override fun toString(): String {
+        return nodes.joinToString("\n")
+    }
+
+    fun asATree(): Graph {
+        val tree = Graph(numberOfNodes)
+        tree.setRoot(root().id)
+        intoTree(root(), Array(this.numberOfNodes + 1) { false }, tree)
+        tree.nodes.forEach {
+            it.isLeaf = it.children.isEmpty()
+        }
+        return tree
+    }
+
+    private fun intoTree(
+        node: Node,
+        visited: Array<Boolean>,
+        tree: Graph
+    ) {
+        visited[node.id] = true
+        node.children
+            .filter { !visited[it] }
+            .map { nodes[it] }
+            .forEach {
+                tree[node.id].children.add(it.id)
+                tree[it.id].parent = node.id
+                intoTree(it, visited, tree)
+            }
+    }
+
+}
+
+
+fun Scan.asGraph(numberOfNodes: Int, numberOfEdges: Int = numberOfNodes - 1): Graph {
+    val graph = Graph(numberOfNodes)
     for (treeRowItr in 1..numberOfEdges) {
-        val (from, to) = scan.nextLine().split(" ").map { it.trim().toInt() }.toTypedArray()
-        tree[from].children.add(tree[to].id)
+        val (from, to) = this.nextLine()
+            .split(" ")
+            .map { it.trim().toInt() }
+            .toTypedArray()
+        graph.connect(from, to)
     }
-    return tree
-}
-
-fun Array<Node>.bfs(root: Node) {
-    val visited = Array(this.size) { false }
-    bfs(root, visited)
-}
-
-fun Array<Node>.bfs(root: Node, visited: Array<Boolean>): Int {
-    var edges = 0
-    visited[root.id] = true
-    root.children.filter { !visited[it] }.map { this[it] }.forEach { node ->
-        edges += bfs(node, visited) + 1
-    }
-    return edges
+    return graph
 }
 
 /** Game theory ***/
@@ -195,6 +254,27 @@ fun Long.modPow(power: Int, mod: Long): Long {
 
 }
 
+fun Long.pow(exponent: Int): Long {
+    return Math.pow(this.toDouble(), exponent.toDouble()).toLong()
+}
+
+fun Long.modMultiply(value: Long, mod: Long): Long {
+    return ((this % mod) * (value % mod)) % mod
+}
+
+fun Long.modAdd(value: Long, mod: Long): Long {
+    return ((this % mod) + (value % mod)) % mod
+}
+
+fun Long.modSubtract(value: Long, mod: Long): Long {
+    var r = ((this % mod) - (value % mod)) % mod
+    while (r < 0) {
+        r += mod
+    }
+    return r
+}
+
+
 fun <T> Array<T>.from(index: Int): List<IndexedValue<T>> {
     return this.withIndex().filter { it.index >= index }
 }
@@ -203,136 +283,142 @@ fun <T> List<T>.from(index: Int): List<IndexedValue<T>> {
     return this.withIndex().filter { it.index >= index }
 }
 
-
-/******* utility functions ( above) *************/
-
-
-fun main(args: Array<String>) {
-    setDevelopmentFlag(args)
-    val scan = scanner()
-    sandbox {
-        val q = scan.nextLine().trim().toInt()
-        for (qItr in 1..q) {
-            val nm = scan.nextLine().split(" ")
-            val n = nm[0].trim().toInt()
-            val m = nm[1].trim().toLong()
-            val a = scan.nextLine().split(" ").map { it.trim().toLong() }.toTypedArray()
-            withTimeToExecution("suboptimalSum") {
-                //                log(suboptimalSum(a, m))
-            }
-
-            withTimeToExecution("optimalSum") {
-                log(optimalSum(a, m))
-            }
-
+fun List<Long>.cumulativeSum(): List<Long> {
+    val cumulativeSum = MutableList(this.size + 1) { 0L }
+    cumulativeSum.forEachIndexed { index, _ ->
+        when (index) {
+            0 -> cumulativeSum[0] = 0
+            else -> cumulativeSum[index] = cumulativeSum[index - 1] + this[index - 1]
         }
-
-    }
-}
-
-fun suboptimalSum(a: Array<Long>, m: Long): Long {
-    val cumulativeSum = Array(a.size + 1) { 0L }
-    cumulativeSum[1] = a[0]
-    a.from(1).forEach { (index, value) ->
-        cumulativeSum[index + 1] = cumulativeSum[index] + value
-    }
-//    debugLog(cumulativeSum.joinToString())
-    var leftAndRightIndex = 0 to 0
-    var maximumSum = 0L
-    for (i in 0 until cumulativeSum.size) {
-        for (j in i + 1 until cumulativeSum.size) {
-            val mod = (cumulativeSum[j] - cumulativeSum[i]) % m
-            if (mod > maximumSum) {
-                maximumSum = mod
-//                debugLog("prev l-r: $leftAndRightIndex")
-                leftAndRightIndex = i - 1 to j - 1
-
-            }
-        }
-    }
-//    debugLog("left - right : $leftAndRightIndex")
-    //1398956404
-    return maximumSum
-}
-
-fun optimalSum(a: Array<Long>, m: Long): Long {
-    val cumulativeSum = cumulativeSum(a)
-    val indexedCumulativeSum = cumulativeSum.map { it % m }.withIndex().sortedBy { it.value }
-    val closestPair = closestPair(indexedCumulativeSum)
-    val farthestPair = farthestPair(indexedCumulativeSum)
-    val c = cumulativeSum[closestPair.second] - cumulativeSum[closestPair.first]
-    val f = cumulativeSum[farthestPair.second] - cumulativeSum[farthestPair.first]
-
-//    debugLog("negativeIndexPair : $closestPair | ${(cumulativeSum[closestPair.second]- cumulativeSum[closestPair.first]) % m}")
-//    debugLog("positiveIndexPair : $farthestPair | ${(cumulativeSum[farthestPair.second]- cumulativeSum[farthestPair.first]) % m}")
-    return if (c % m > f % m) c % m else f % m
-    //1398956404
-}
-
-fun closestPair(indexedCumulativeSum: List<IndexedValue<Long>>): Pair<Int, Int> {
-    val minDifferences = indexedCumulativeSum.from(1)
-        .map { (index, indexedValue) -> Pair(indexedCumulativeSum[index - 1], indexedValue) }
-        .filter { (prev, current) -> prev.index > current.index }
-        .map { (prev, current) ->
-            Pair(Pair(current.index, prev.index), prev.value - current.value)
-        }
-        .sortedBy { it.second }
-    return minDifferences.last().first
-}
-
-
-fun farthestPair(indexedCumulativeSum: List<IndexedValue<Long>>): Pair<Int, Int> {
-    var l = 0
-    var r = indexedCumulativeSum.size - 1
-    while (indexedCumulativeSum[l].index > indexedCumulativeSum[r].index) {
-        r--
-        if (r == 0) {
-            l++
-            r = indexedCumulativeSum.size - 1
-        }
-    }
-    return indexedCumulativeSum[l].index to indexedCumulativeSum[r].index
-}
-
-private fun cumulativeSum(a: Array<Long>): Array<Long> {
-    val cumulativeSum = Array(a.size + 1) { 0L }
-    cumulativeSum[1] = a[0]
-    a.from(1).forEach { (index, value) ->
-        cumulativeSum[index + 1] = cumulativeSum[index] + value
     }
     return cumulativeSum
 }
 
-fun maximumSum(a: Array<Long>, m: Long): Long {
-    val arrayWithMod = a.map { it % m }
-    var leftIndex = 0
-    var rightIndex = 0
-    var maximumSum = 0L
-    var sumTillNow = 0L
-    var leftAndRightIndex = 0 to 0
-    while (leftIndex < arrayWithMod.size) {
-        if (sumTillNow < m && rightIndex < arrayWithMod.size) {
-            sumTillNow += arrayWithMod[rightIndex]
-            rightIndex++
-        } else {
-            while (sumTillNow >= m && leftIndex <= rightIndex) {
-                sumTillNow -= arrayWithMod[leftIndex]
-                leftIndex++
-            }
-            if (rightIndex == arrayWithMod.size) {
-                leftIndex++
-            }
-        }
-        if (sumTillNow in (maximumSum + 1)..(m - 1)) {
-            maximumSum = sumTillNow
-            debugLog("prev l-r: $leftAndRightIndex")
-            leftAndRightIndex = leftIndex to rightIndex
+val MOD = 10L.pow(9).plus(7)
 
+/******* utility functions ( above) *************/
+
+fun main(args: Array<String>) {
+    setDevelopmentFlag(args)
+    val scan = scanner()
+    sandbox(5000000) {
+        val n = scan.nextLine().trim().toInt()
+        val goodConfiguration = Array(n + 1) { 1L }
+        val nearlyGoodConfiguration = Array(n + 1) { 1L }
+        val roads = withTimeToExecution("asGraph") { scan.asGraph(n) }
+        val result = withTimeToExecution("kingdomDivision") {
+            kingdomDivision(
+                roads,
+                nearlyGoodConfiguration,
+                goodConfiguration
+            )
         }
+        println(result)
     }
-    debugLog("left - right : $leftAndRightIndex")
-    return maximumSum
 }
+
+
+fun kingdomDivision(
+    roads: Graph,
+    nearlyGoodConfiguration: Array<Long>,
+    goodConfiguration: Array<Long>
+): Long {
+    var r = roads
+    withTimeToExecution("asTree") {
+        r = roads.asATree()
+    }
+
+//    withTimeToExecution("visitAllPaths") {
+//        r.visitAllPaths(r.root(), nearlyGoodConfiguration, goodConfiguration)
+//    }
+    withTimeToExecution("visitAllPathsRecursive") {
+        r.visitAllPathsRecursive(nearlyGoodConfiguration, goodConfiguration)
+    }
+
+//    roads.visitAllPathsRecursive(nearlyGoodConfiguration, goodConfiguration)
+//    debugLog(goodConfiguration.withIndex().joinToString("\n"))
+//    debugLog(nearlyGoodConfiguration.withIndex().joinToString("\n"))
+    return (2 * goodConfiguration[1]) % MOD
+}
+
+fun Graph.visitAllPathsRecursive(
+    nearlyGoodConfiguration: Array<Long>,
+    goodConfiguration: Array<Long>
+) {
+    val stack = ArrayDeque<Node>()
+    val visited = Array(this.numberOfNodes + 1) { false }
+    stack.add(this.root())
+    while (stack.isNotEmpty()) {
+        val currentNode = stack.peek()
+//        debugLog(currentNode)
+        if (!visited[currentNode.id]) {
+            currentNode.children
+                .map { this[it] }
+                .forEach {
+                    it.parent = currentNode.id
+                    stack.push(it)
+                }
+            visited[currentNode.id] = true
+        } else {
+            stack.pop()
+            if (currentNode.isLeaf) {
+                nearlyGoodConfiguration[currentNode.id] = 1
+                goodConfiguration[currentNode.id] = 0
+            } else {
+                currentNode.children
+                    .forEach {
+                        nearlyGoodConfiguration[currentNode.id] =
+                                nearlyGoodConfiguration[currentNode.id].modMultiply(goodConfiguration[it], MOD)
+
+                    }
+                currentNode.children
+                    .map {
+                        goodConfiguration[it].modMultiply(2L, MOD).modAdd(nearlyGoodConfiguration[it], MOD)
+                    }
+                    .forEach {
+                        goodConfiguration[currentNode.id] = goodConfiguration[currentNode.id].modMultiply(it, MOD)
+                    }
+                goodConfiguration[currentNode.id] =
+                        goodConfiguration[currentNode.id].modSubtract(nearlyGoodConfiguration[currentNode.id], MOD)
+
+            }
+        }
+
+    }
+}
+
+
+fun Graph.visitAllPaths(
+    root: Node,
+    nearlyGoodConfiguration: Array<Long>,
+    goodConfiguration: Array<Long>
+) {
+    if (root.children.isEmpty()) {
+        root.isLeaf = true
+        nearlyGoodConfiguration[root.id] = 1
+        goodConfiguration[root.id] = 0
+        return
+    }
+    root.children
+        .map { this[it] }
+        .forEach {
+            it.parent = root.id
+            visitAllPaths(it, nearlyGoodConfiguration, goodConfiguration)
+        }
+    root.children
+        .forEach {
+            nearlyGoodConfiguration[root.id] = nearlyGoodConfiguration[root.id].modMultiply(goodConfiguration[it], MOD)
+        }
+    root.children
+        .map {
+            goodConfiguration[it].modMultiply(2L, MOD).modAdd(nearlyGoodConfiguration[it], MOD)
+        }
+        .forEach {
+            goodConfiguration[root.id] = goodConfiguration[root.id].modMultiply(it, MOD)
+        }
+    goodConfiguration[root.id] = goodConfiguration[root.id].modSubtract(nearlyGoodConfiguration[root.id], MOD)
+}
+
 
 
 

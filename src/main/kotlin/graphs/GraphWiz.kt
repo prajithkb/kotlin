@@ -28,9 +28,12 @@ class GraphWiz(private val root: Node, val path: String = ".") {
         nodes[node.id] = child
     }
 
-    fun start() {
+    fun reset() {
         nodes.clear()
         nodes.put(root.id, root)
+    }
+
+    fun start() {
         file.appendText("@startuml\n")
     }
 
@@ -38,14 +41,13 @@ class GraphWiz(private val root: Node, val path: String = ".") {
         file.appendText("@enduml\n")
     }
 
-    fun appendToDotFile() {
+    fun toDotFile() {
+        start()
         file.appendText("graph G {\n")
         file.appendText(bfs(root))
         file.appendText("}\n")
-        nodes.clear()
-        nodes.put(root.id, root)
+        stop()
     }
-
     private fun bfs(root: Node): String {
         var output = ""
         root.children.forEach {
