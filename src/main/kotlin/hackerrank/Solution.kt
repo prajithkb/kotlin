@@ -306,7 +306,7 @@ fun beautifulQuadruplesOptimal(a: Int, b: Int, c: Int, d: Int): Long {
     val size = d + 2
     val MAX_VALUE = 4096
     val pairsEndingWithB = Array(size) { 0L }
-    val xorsEndingWithB = Array(size) { Array(MAX_VALUE) { 0L } }
+    val xorsEndingWithB = Array(size) { LongArray(MAX_VALUE) }
     for (i in 1..a) {
         for (j in i..b) {
             pairsEndingWithB[j]++
@@ -314,7 +314,7 @@ fun beautifulQuadruplesOptimal(a: Int, b: Int, c: Int, d: Int): Long {
         }
     }
     val pairsStartingWithC = Array(size) { 0L }
-    val xorsStartingWithC = Array(size) { Array(MAX_VALUE) { 0L } }
+    val xorsStartingWithC = Array(size) { LongArray(MAX_VALUE) }
     for (k in 1..c) {
         for (l in k..d) {
             pairsStartingWithC[k]++
@@ -337,6 +337,7 @@ fun beautifulQuadruplesOptimal(a: Int, b: Int, c: Int, d: Int): Long {
     var duplicates = 0L
     for (i in 1 until size) {
         for (j in 0 until MAX_VALUE) {
+//            xorsStartingWithC[i][j] += xorsStartingWithC[i - 1][j]
             duplicates += xorsEndingWithB[i][j] * (xorsStartingWithC[d + 1][j] - xorsStartingWithC[i - 1][j])
         }
     }
