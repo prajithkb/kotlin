@@ -4,11 +4,11 @@ import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.File
 import java.io.OutputStreamWriter
-import java.util.*
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import kotlin.system.measureTimeMillis
+
 
 /******* utility functions *************/
 
@@ -43,15 +43,15 @@ fun log(message: Any?) {
     println(message)
 }
 
-fun debugLog(message: Any) {
-    debugLog(Level.DEBUG) { message.toString() }
+fun debugLog(message: Any?) {
+    debugLog(Level.DEBUG) { message?.toString() }
 }
 
 fun debugLog(level: Level = Level.DEBUG, message: Any) {
     debugLog(level) { message.toString() }
 }
 
-inline fun debugLog(level: Level = Level.DEBUG, block: () -> Any) {
+inline fun debugLog(level: Level = Level.DEBUG, block: () -> Any?) {
     if (devOverrides.isDebug) {
         log(block(), level)
     }
@@ -105,9 +105,8 @@ class Scan(private val reader: BufferedReader) {
 
 val writer = BufferedWriter(OutputStreamWriter(System.out))
 fun println(message: Any) {
-    kotlin.io.println(message)
-//    writer.write(message.toString())
-//    writer.newLine()
+    writer.write(message.toString())
+    writer.newLine()
 }
 
 val isDebug =
@@ -176,10 +175,10 @@ class Graph(
         return nodes.joinToString("\n")
     }
 
-    fun asATree(): Graph {
+    fun asATree(root: Int): Graph {
         val tree = Graph(numberOfNodes)
-        tree.setRoot(root().id)
-        intoTree(root(), Array(this.numberOfNodes + 1) { false }, tree)
+        tree.setRoot(root)
+        intoTree(this[root], Array(this.numberOfNodes + 1) { false }, tree)
         tree.nodes.forEach {
             it.isLeaf = it.children.isEmpty()
         }
@@ -283,142 +282,72 @@ fun <T> List<T>.from(index: Int): List<IndexedValue<T>> {
     return this.withIndex().filter { it.index >= index }
 }
 
-fun List<Long>.cumulativeSum(): List<Long> {
-    val cumulativeSum = MutableList(this.size + 1) { 0L }
-    cumulativeSum.forEachIndexed { index, _ ->
-        when (index) {
-            0 -> cumulativeSum[0] = 0
-            else -> cumulativeSum[index] = cumulativeSum[index - 1] + this[index - 1]
-        }
-    }
-    return cumulativeSum
-}
 
 val MOD = 10L.pow(9).plus(7)
 
 /******* utility functions ( above) *************/
 
+fun beautifulQuadruplesBruteForce(a: Int, b: Int, c: Int, d: Int): Int {
+    val set = mutableSetOf<List<Int>>()
+    for (i in 1..a) {
+        for (j in 1..b) {
+            for (k in 1..c) {
+                for (l in 1..d) {
+                    set.add(listOf(i, j, k, l).sorted())
+                }
+            }
+        }
+    }
+//    debugLog("DUPLICATES COUNT ${set.map { Pair(it, it.fold(0) { acc, l -> acc xor l }) }.filter { it.second == 0 }.count()}")
+    return set.map { Pair(it, it.fold(0) { acc, l -> acc xor l }) }.filter { it.second != 0 }.count()
+}
+
+fun beautifulQuadruplesOptimal(a: Int, b: Int, c: Int, d: Int): Long {
+    val size = d + 2
+    val MAX_VALUE = 4096
+    val pairsEndingWithB = Array(size) { 0L }
+    val xorsEndingWithB = Array(size) { Array(MAX_VALUE) { 0L } }
+    for (i in 1..a) {
+        for (j in i..b) {
+            pairsEndingWithB[j]++
+            xorsEndingWithB[j][i xor j]++
+        }
+    }
+    val pairsStartingWithC = Array(size) { 0L }
+    val xorsStartingWithC = Array(size) { Array(MAX_VALUE) { 0L } }
+    for (k in 1..c) {
+        for (l in k..d) {
+            pairsStartingWithC[k]++
+            xorsStartingWithC[k][k xor l]++
+        }
+    }
+    for (i in 1 until size) {
+        for (j in 0 until MAX_VALUE) {
+            xorsStartingWithC[i][j] += xorsStartingWithC[i - 1][j]
+        }
+    }
+
+    for (i in 1 until size) {
+        pairsStartingWithC[i] += pairsStartingWithC[i - 1]
+    }
+    var count = 0L
+    for (i in 1..b) {
+        count += pairsEndingWithB[i] * (pairsStartingWithC[c] - pairsStartingWithC[i - 1])
+    }
+    var duplicates = 0L
+    for (i in 1 until size) {
+        for (j in 0 until MAX_VALUE) {
+            duplicates += xorsEndingWithB[i][j] * (xorsStartingWithC[d + 1][j] - xorsStartingWithC[i - 1][j])
+        }
+    }
+    return count - duplicates
+}
+
 fun main(args: Array<String>) {
     setDevelopmentFlag(args)
     val scan = scanner()
-    sandbox(5000000) {
-        val n = scan.nextLine().trim().toInt()
-        val goodConfiguration = Array(n + 1) { 1L }
-        val nearlyGoodConfiguration = Array(n + 1) { 1L }
-        val roads = withTimeToExecution("asGraph") { scan.asGraph(n) }
-        val result = withTimeToExecution("kingdomDivision") {
-            kingdomDivision(
-                roads,
-                nearlyGoodConfiguration,
-                goodConfiguration
-            )
-        }
-        println(result)
+    sandbox(5000) {
+        val (a, b, c, d) = scan.nextLine().split(" ").map { it.trim().toInt() }.sorted()
+        log(withTimeToExecution("beautifulQuadruplesBruteOptimal") { beautifulQuadruplesOptimal(a, b, c, d) })
     }
 }
-
-
-fun kingdomDivision(
-    roads: Graph,
-    nearlyGoodConfiguration: Array<Long>,
-    goodConfiguration: Array<Long>
-): Long {
-    var r = roads
-    withTimeToExecution("asTree") {
-        r = roads.asATree()
-    }
-
-//    withTimeToExecution("visitAllPaths") {
-//        r.visitAllPaths(r.root(), nearlyGoodConfiguration, goodConfiguration)
-//    }
-    withTimeToExecution("visitAllPathsRecursive") {
-        r.visitAllPathsRecursive(nearlyGoodConfiguration, goodConfiguration)
-    }
-
-//    roads.visitAllPathsRecursive(nearlyGoodConfiguration, goodConfiguration)
-//    debugLog(goodConfiguration.withIndex().joinToString("\n"))
-//    debugLog(nearlyGoodConfiguration.withIndex().joinToString("\n"))
-    return (2 * goodConfiguration[1]) % MOD
-}
-
-fun Graph.visitAllPathsRecursive(
-    nearlyGoodConfiguration: Array<Long>,
-    goodConfiguration: Array<Long>
-) {
-    val stack = ArrayDeque<Node>()
-    val visited = Array(this.numberOfNodes + 1) { false }
-    stack.add(this.root())
-    while (stack.isNotEmpty()) {
-        val currentNode = stack.peek()
-//        debugLog(currentNode)
-        if (!visited[currentNode.id]) {
-            currentNode.children
-                .map { this[it] }
-                .forEach {
-                    it.parent = currentNode.id
-                    stack.push(it)
-                }
-            visited[currentNode.id] = true
-        } else {
-            stack.pop()
-            if (currentNode.isLeaf) {
-                nearlyGoodConfiguration[currentNode.id] = 1
-                goodConfiguration[currentNode.id] = 0
-            } else {
-                currentNode.children
-                    .forEach {
-                        nearlyGoodConfiguration[currentNode.id] =
-                                nearlyGoodConfiguration[currentNode.id].modMultiply(goodConfiguration[it], MOD)
-
-                    }
-                currentNode.children
-                    .map {
-                        goodConfiguration[it].modMultiply(2L, MOD).modAdd(nearlyGoodConfiguration[it], MOD)
-                    }
-                    .forEach {
-                        goodConfiguration[currentNode.id] = goodConfiguration[currentNode.id].modMultiply(it, MOD)
-                    }
-                goodConfiguration[currentNode.id] =
-                        goodConfiguration[currentNode.id].modSubtract(nearlyGoodConfiguration[currentNode.id], MOD)
-
-            }
-        }
-
-    }
-}
-
-
-fun Graph.visitAllPaths(
-    root: Node,
-    nearlyGoodConfiguration: Array<Long>,
-    goodConfiguration: Array<Long>
-) {
-    if (root.children.isEmpty()) {
-        root.isLeaf = true
-        nearlyGoodConfiguration[root.id] = 1
-        goodConfiguration[root.id] = 0
-        return
-    }
-    root.children
-        .map { this[it] }
-        .forEach {
-            it.parent = root.id
-            visitAllPaths(it, nearlyGoodConfiguration, goodConfiguration)
-        }
-    root.children
-        .forEach {
-            nearlyGoodConfiguration[root.id] = nearlyGoodConfiguration[root.id].modMultiply(goodConfiguration[it], MOD)
-        }
-    root.children
-        .map {
-            goodConfiguration[it].modMultiply(2L, MOD).modAdd(nearlyGoodConfiguration[it], MOD)
-        }
-        .forEach {
-            goodConfiguration[root.id] = goodConfiguration[root.id].modMultiply(it, MOD)
-        }
-    goodConfiguration[root.id] = goodConfiguration[root.id].modSubtract(nearlyGoodConfiguration[root.id], MOD)
-}
-
-
-
-
