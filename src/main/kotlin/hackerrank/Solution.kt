@@ -60,6 +60,21 @@ inline fun debugLog(level: Level = Level.DEBUG, block: () -> Any?) {
 
 /** Timed execution ****/
 
+data class TimeMetric(val name: String, var duration: Long = 0) {
+    override fun toString(): String {
+        return "TimeMetric(name=$name, duration=$duration ms)"
+    }
+}
+
+inline fun <T> TimeMetric.timed(block: () -> T): T {
+    var value: T? = null
+    val time = measureTimeMillis {
+        value = block()
+    }
+    this.duration += time
+    return value!!
+}
+
 inline fun <T> withTimeToExecution(operationName: String = "Overall", block: () -> T): T {
     var value: T? = null
     val time = measureTimeMillis {
@@ -287,68 +302,15 @@ val MOD = 10L.pow(9).plus(7)
 
 /******* utility functions ( above) *************/
 
-fun beautifulQuadruplesBruteForce(a: Int, b: Int, c: Int, d: Int): Int {
-    val set = mutableSetOf<List<Int>>()
-    for (i in 1..a) {
-        for (j in 1..b) {
-            for (k in 1..c) {
-                for (l in 1..d) {
-                    set.add(listOf(i, j, k, l).sorted())
-                }
-            }
-        }
-    }
-//    debugLog("DUPLICATES COUNT ${set.map { Pair(it, it.fold(0) { acc, l -> acc xor l }) }.filter { it.second == 0 }.count()}")
-    return set.map { Pair(it, it.fold(0) { acc, l -> acc xor l }) }.filter { it.second != 0 }.count()
-}
-
-fun beautifulQuadruplesOptimal(a: Int, b: Int, c: Int, d: Int): Long {
-    val size = d + 2
-    val MAX_VALUE = 4096
-    val pairsEndingWithB = Array(size) { 0L }
-    val xorsEndingWithB = Array(size) { LongArray(MAX_VALUE) }
-    for (i in 1..a) {
-        for (j in i..b) {
-            pairsEndingWithB[j]++
-            xorsEndingWithB[j][i xor j]++
-        }
-    }
-    val pairsStartingWithC = Array(size) { 0L }
-    val xorsStartingWithC = Array(size) { LongArray(MAX_VALUE) }
-    for (k in 1..c) {
-        for (l in k..d) {
-            pairsStartingWithC[k]++
-            xorsStartingWithC[k][k xor l]++
-        }
-    }
-    for (i in 1 until size) {
-        for (j in 0 until MAX_VALUE) {
-            xorsStartingWithC[i][j] += xorsStartingWithC[i - 1][j]
-        }
-    }
-
-    for (i in 1 until size) {
-        pairsStartingWithC[i] += pairsStartingWithC[i - 1]
-    }
-    var count = 0L
-    for (i in 1..b) {
-        count += pairsEndingWithB[i] * (pairsStartingWithC[c] - pairsStartingWithC[i - 1])
-    }
-    var duplicates = 0L
-    for (i in 1 until size) {
-        for (j in 0 until MAX_VALUE) {
-//            xorsStartingWithC[i][j] += xorsStartingWithC[i - 1][j]
-            duplicates += xorsEndingWithB[i][j] * (xorsStartingWithC[d + 1][j] - xorsStartingWithC[i - 1][j])
-        }
-    }
-    return count - duplicates
-}
-
+val scanDuration = TimeMetric("Scan")
+val logDuration = TimeMetric("Log")
 fun main(args: Array<String>) {
     setDevelopmentFlag(args)
     val scan = scanner()
     sandbox(5000) {
-        val (a, b, c, d) = scan.nextLine().split(" ").map { it.trim().toInt() }.sorted()
-        log(withTimeToExecution("beautifulQuadruplesBruteOptimal") { beautifulQuadruplesOptimal(a, b, c, d) })
+        val line = scanDuration.timed { scan.nextLine() }
+        debugLog(scanDuration)
+        logDuration.timed { log(line) }
+        debugLog(logDuration)
     }
 }
