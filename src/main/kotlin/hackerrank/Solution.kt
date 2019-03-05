@@ -4,6 +4,7 @@ import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.File
 import java.io.OutputStreamWriter
+import java.util.*
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
@@ -60,13 +61,13 @@ inline fun debugLog(level: Level = Level.DEBUG, block: () -> Any?) {
 
 /** Timed execution ****/
 
-data class TimeMetric(val name: String, var duration: Long = 0) {
+data class Duration(val name: String, var duration: Long = 0) {
     override fun toString(): String {
-        return "TimeMetric(name=$name, duration=$duration ms)"
+        return "Duration(name=$name, duration=$duration ms)"
     }
 }
 
-inline fun <T> TimeMetric.timed(block: () -> T): T {
+inline fun <T> Duration.timed(block: () -> T): T {
     var value: T? = null
     val time = measureTimeMillis {
         value = block()
@@ -302,15 +303,60 @@ val MOD = 10L.pow(9).plus(7)
 
 /******* utility functions ( above) *************/
 
-val scanDuration = TimeMetric("Scan")
-val logDuration = TimeMetric("Log")
+data class Edge(val from: Int, val to: Int, val distance: Int)
+
+val INVALID = Edge(-1, -1, -1)
+
+val visited = BooleanArray(1001)
+
+val distances = Array(1001) { BooleanArray(1024) }
+
+val connections = MutableList(1001) { mutableListOf<Edge>() }
+
+
+
 fun main(args: Array<String>) {
     setDevelopmentFlag(args)
     val scan = scanner()
-    sandbox(5000) {
-        val line = scanDuration.timed { scan.nextLine() }
-        debugLog(scanDuration)
-        logDuration.timed { log(line) }
-        debugLog(logDuration)
+    sandbox(50000) {
+        val nm = scan.nextLine().split(" ")
+        val n = nm[0].trim().toInt()
+        val m = nm[1].trim().toInt()
+        for (i in 0 until m) {
+            val (from, to, distance) = scan.nextLine().split(" ").map { it.trim().toInt() }
+            connections[from].add(Edge(from, to, distance))
+            connections[to].add(Edge(to, from, distance))
+        }
+        val (A, B) = scan.nextLine().split(" ").map { it.trim().toInt() }
+        val result = beautifulPath(A, B)
+        log(result)
     }
 }
+
+fun beautifulPath(A: Int, B: Int): Int {
+    debugLog("A:$A, B:$B")
+//    debugLog(connections)
+//    val priorityQueue = PriorityQueue<Edge>(1000, compareBy { it.distance })
+    val queue = LinkedList<Edge>()
+    queue.addAll(connections[A])
+    visited[A] = true
+//    debugLog(priorityQueue)
+    while (queue.isNotEmpty()) {
+//        debugLog(priorityQueue.filter { it.to == B })
+        val e = queue.poll()
+//        debugLog(e)
+        val (from, to, distance) = e
+        distances[to][distance] = true
+//        if(!distances[to][distance]){
+        val newConnections = connections[to]
+            .filterNot { distances[it.to][distance or it.distance] }
+            .map { Edge(from, it.to, distance or it.distance) }
+        queue.addAll(newConnections)
+//            visited[to] = true
+//        }
+    }
+    val leastPenality = distances[B].withIndex().find { it.value }
+    return leastPenality?.index ?: -1
+
+}
+
