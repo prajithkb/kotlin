@@ -313,7 +313,7 @@ val distances = Array(1001) { BooleanArray(1024) }
 
 val connections = MutableList(1001) { mutableListOf<Edge>() }
 
-
+val edges = Array(1001) { mutableListOf<Pair<Int, Int>>() }
 
 fun main(args: Array<String>) {
     setDevelopmentFlag(args)
@@ -326,37 +326,68 @@ fun main(args: Array<String>) {
             val (from, to, distance) = scan.nextLine().split(" ").map { it.trim().toInt() }
             connections[from].add(Edge(from, to, distance))
             connections[to].add(Edge(to, from, distance))
+            edges[from].add(to to distance)
+            edges[to].add(from to distance)
         }
         val (A, B) = scan.nextLine().split(" ").map { it.trim().toInt() }
-        val result = beautifulPath(A, B)
-        log(result)
+        withTimeToExecution("beautifulPath") {
+            val result = beautifulPath(A, B)
+            log(result)
+        }
+
+        withTimeToExecution("beautifulPathOptimal") {
+            val result = beautifulPathOptimal(A, B)
+            log(result)
+        }
+
+        debugLog(listOf(connectionsDuration, optimalConnectionsDuration))
+
     }
 }
 
+val connectionsDuration = Duration("Connections")
+
 fun beautifulPath(A: Int, B: Int): Int {
     debugLog("A:$A, B:$B")
-//    debugLog(connections)
-//    val priorityQueue = PriorityQueue<Edge>(1000, compareBy { it.distance })
-    val queue = LinkedList<Edge>()
+    val queue = ArrayDeque<Edge>(10000)
     queue.addAll(connections[A])
     visited[A] = true
-//    debugLog(priorityQueue)
     while (queue.isNotEmpty()) {
-//        debugLog(priorityQueue.filter { it.to == B })
         val e = queue.poll()
-//        debugLog(e)
         val (from, to, distance) = e
         distances[to][distance] = true
-//        if(!distances[to][distance]){
-        val newConnections = connections[to]
+//        connectionsDuration.timed {
+        connections[to]
             .filterNot { distances[it.to][distance or it.distance] }
-            .map { Edge(from, it.to, distance or it.distance) }
-        queue.addAll(newConnections)
-//            visited[to] = true
+//                .map { Edge(from, it.to, distance or it.distance) }
+            .forEach { (_, targetTo, targetDistance) ->
+                distances[targetTo][distance or targetDistance] = true
+                queue.add(Edge(from, targetTo, distance or targetDistance))
+            }
 //        }
     }
-    val leastPenality = distances[B].withIndex().find { it.value }
-    return leastPenality?.index ?: -1
+    return distances[B].indexOfFirst { it }
+}
 
+val optimalConnectionsDuration = Duration("OptimalConnections")
+
+fun beautifulPathOptimal(A: Int, B: Int): Int {
+    val visited = Array(1001) { Array(1024) { false } }
+    val working = LinkedList<Pair<Int, Int>>()
+    working.add(A to 0)
+    while (working.isNotEmpty()) {
+        val (vertex, cost) = working.poll()
+        visited[vertex][cost] = true
+        optimalConnectionsDuration.timed {
+            edges[vertex]
+                .filterNot { (targetVertex, targetCost) -> visited[targetVertex][targetCost or cost] }
+                .forEach { (targetVertex, targetCost) ->
+                    visited[targetVertex][targetCost or cost] = true
+                    working.push(targetVertex to (targetCost or cost))
+                }
+        }
+
+    }
+    return visited[B].indexOfFirst { it }
 }
 
