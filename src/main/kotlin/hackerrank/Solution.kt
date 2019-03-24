@@ -91,7 +91,7 @@ fun <T> completeWithin(timeoutInMilliSecs: Long = 5000, block: () -> T): T? {
             .supplyAsync(block)
             .get(timeoutInMilliSecs, TimeUnit.MILLISECONDS)
     } catch (e: TimeoutException) {
-        debugLog(Level.ERROR, "Failed to complete within $timeoutInMilliSecs ms")
+        debugLog(Level.ERROR, "Failed end complete within $timeoutInMilliSecs ms")
         return null
     }
 }
@@ -117,6 +117,14 @@ class Scan(private val reader: BufferedReader) {
     fun nextLine(): String {
         return reader.readLine()
     }
+
+    fun nextInts(): List<Int> {
+        return this.nextLine().split(" ").map { it.trim().toInt() }
+    }
+
+    fun nextLongs(): List<Long> {
+        return this.nextLine().split(" ").map { it.trim().toLong() }
+    }
 }
 
 val writer = BufferedWriter(OutputStreamWriter(System.out))
@@ -129,6 +137,7 @@ val isDebug =
     java.lang.management.ManagementFactory.getRuntimeMXBean().inputArguments.toString().indexOf("-agentlib:jdwp") > 0
 val defaultTimeOut = if (isDebug) 50000000L else 5000L
 inline fun sandbox(within: Long = defaultTimeOut, crossinline block: () -> Any) {
+    debugLog("Running with timeout of $within")
     val within =
         writer.use {
             completeWithin(within) {
@@ -252,7 +261,7 @@ fun Long.modPow(power: Int, mod: Long): Long {
     var res = 1L
     var y = power.toLong()
     // Update x if it is more
-    // than or equal to p
+    // than or equal end p
     var x = this % mod
     while (y > 0) {
         // If y is odd, multiply x
@@ -303,91 +312,61 @@ val MOD = 10L.pow(9).plus(7)
 
 /******* utility functions ( above) *************/
 
-data class Edge(val from: Int, val to: Int, val distance: Int)
+data class Route(val start: Int, val end: Int, val cost: Long = 0)
 
-val INVALID = Edge(-1, -1, -1)
+val computedMinimumCostTill = MutableList(50001) { Long.MAX_VALUE }
 
-val visited = BooleanArray(1001)
-
-val distances = Array(1001) { BooleanArray(1024) }
-
-val connections = MutableList(1001) { mutableListOf<Edge>() }
-
-val edges = Array(1001) { mutableListOf<Pair<Int, Int>>() }
+val routes = MutableList(50001) { mutableListOf<Route>() }
 
 fun main(args: Array<String>) {
     setDevelopmentFlag(args)
     val scan = scanner()
-    sandbox(50000) {
-        val nm = scan.nextLine().split(" ")
-        val n = nm[0].trim().toInt()
-        val m = nm[1].trim().toInt()
-        for (i in 0 until m) {
-            val (from, to, distance) = scan.nextLine().split(" ").map { it.trim().toInt() }
-            connections[from].add(Edge(from, to, distance))
-            connections[to].add(Edge(to, from, distance))
-            edges[from].add(to to distance)
-            edges[to].add(from to distance)
+    sandbox(1000000) {
+        val (n, m) = scan.nextInts()
+        for (i in 1..m) {
+            val (from, to, cost) = scan.nextInts()
+            routes[from].add(Route(from, to, cost.toLong()))
+            routes[to].add(Route(to, from, cost.toLong()))
         }
-        val (A, B) = scan.nextLine().split(" ").map { it.trim().toInt() }
-        withTimeToExecution("beautifulPath") {
-            val result = beautifulPath(A, B)
-            log(result)
-        }
-
-        withTimeToExecution("beautifulPathOptimal") {
-            val result = beautifulPathOptimal(A, B)
-            log(result)
-        }
-
-        debugLog(listOf(connectionsDuration, optimalConnectionsDuration))
-
+        log(getCost(n))
     }
 }
 
-val connectionsDuration = Duration("Connections")
-
-fun beautifulPath(A: Int, B: Int): Int {
-    debugLog("A:$A, B:$B")
-    val queue = ArrayDeque<Edge>(10000)
-    queue.addAll(connections[A])
-    visited[A] = true
+fun getCost(end: Int): Long {
+    val start = 1
+    val visited = BooleanArray(50001)
+    val queue = PriorityQueue<Route>(compareBy { computedMinimumCostTill[it.end] })
+    computedMinimumCostTill[start] = 0
+    visitNeighbours(start, visited, queue)
     while (queue.isNotEmpty()) {
-        val e = queue.poll()
-        val (from, to, distance) = e
-        distances[to][distance] = true
-//        connectionsDuration.timed {
-        connections[to]
-            .filterNot { distances[it.to][distance or it.distance] }
-//                .map { Edge(from, it.to, distance or it.distance) }
-            .forEach { (_, targetTo, targetDistance) ->
-                distances[targetTo][distance or targetDistance] = true
-                queue.add(Edge(from, targetTo, distance or targetDistance))
-            }
-//        }
+        val route = queue.poll()
+        if (route.end == end) {
+            break
+        }
+//        debugLog(route)
+        visitNeighbours(route.end, visited, queue)
+
+
     }
-    return distances[B].indexOfFirst { it }
+//    computedMinimumCostTill.withIndex().take(end+1).forEach { debugLog(it) }
+    //117
+    return if (computedMinimumCostTill[end] == Long.MAX_VALUE) -1 else computedMinimumCostTill[end]
 }
 
-val optimalConnectionsDuration = Duration("OptimalConnections")
+private fun visitNeighbours(
+    next: Int,
+    visited: BooleanArray,
+    queue: AbstractQueue<Route>
+) {
+    visited[next] = true
+    routes[next]
+        .filterNot { visited[it.end] }
+        .forEach { visit(it, queue) }
+}
 
-fun beautifulPathOptimal(A: Int, B: Int): Int {
-    val visited = Array(1001) { Array(1024) { false } }
-    val working = LinkedList<Pair<Int, Int>>()
-    working.add(A to 0)
-    while (working.isNotEmpty()) {
-        val (vertex, cost) = working.poll()
-        visited[vertex][cost] = true
-        optimalConnectionsDuration.timed {
-            edges[vertex]
-                .filterNot { (targetVertex, targetCost) -> visited[targetVertex][targetCost or cost] }
-                .forEach { (targetVertex, targetCost) ->
-                    visited[targetVertex][targetCost or cost] = true
-                    working.push(targetVertex to (targetCost or cost))
-                }
-        }
-
-    }
-    return visited[B].indexOfFirst { it }
+private fun visit(it: Route, queue: AbstractQueue<Route>) {
+    val costTillNow = computedMinimumCostTill[it.start] + (it.cost - computedMinimumCostTill[it.start]).coerceAtLeast(0)
+    computedMinimumCostTill[it.end] = minOf(computedMinimumCostTill[it.end], costTillNow)
+    queue.add(it)
 }
 
