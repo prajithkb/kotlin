@@ -4,10 +4,10 @@ import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.File
 import java.io.OutputStreamWriter
-import java.util.*
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
+import kotlin.math.max
 import kotlin.system.measureTimeMillis
 
 
@@ -35,13 +35,13 @@ enum class Level {
 
 fun log(message: Any?, level: Level) {
     when (level) {
-        Level.DEBUG, Level.ERROR -> if (devOverrides.isDebug) println("$level: $message")
-        Level.ACTUAL -> println(message)
+        Level.DEBUG, Level.ERROR -> if (devOverrides.isDebug) fastPrintln("$level: $message")
+        Level.ACTUAL -> fastPrintln(message)
     }
 }
 
 fun log(message: Any?) {
-    println(message)
+    fastPrintln(message)
 }
 
 fun debugLog(message: Any?) {
@@ -128,8 +128,8 @@ class Scan(private val reader: BufferedReader) {
 }
 
 val writer = BufferedWriter(OutputStreamWriter(System.out))
-fun println(message: Any) {
-    writer.write(message.toString())
+fun fastPrintln(message: Any?) {
+    writer.write(message?.toString())
     writer.newLine()
 }
 
@@ -164,6 +164,10 @@ class Graph(
     private var root: Int = 1
 ) {
 
+    fun size(): Int {
+        return numberOfNodes + 1
+    }
+
     fun root(): Node {
         return nodes[root]
     }
@@ -179,21 +183,6 @@ class Graph(
     fun connect(from: Int, to: Int) {
         nodes[from].children.add(nodes[to].id)
         nodes[to].children.add(nodes[from].id)
-    }
-
-    fun bfs(root: Node): Int {
-        return bfs(root, Array(numberOfNodes + 1) { false })
-    }
-
-    fun bfs(root: Node, visited: Array<Boolean>): Int {
-        var edges = 0
-        visited[root.id] = true
-        root.children
-            .filter { !visited[it] }
-            .map { this.nodes[it] }.forEach { node ->
-                edges += bfs(node, visited) + 1
-            }
-        return edges
     }
 
     override fun toString(): String {
@@ -229,7 +218,7 @@ class Graph(
 }
 
 
-fun Scan.asGraph(numberOfNodes: Int, numberOfEdges: Int = numberOfNodes - 1): Graph {
+fun Scan.toGraph(numberOfNodes: Int, numberOfEdges: Int = numberOfNodes - 1): Graph {
     val graph = Graph(numberOfNodes)
     for (treeRowItr in 1..numberOfEdges) {
         val (from, to) = this.nextLine()
@@ -310,63 +299,86 @@ fun <T> List<T>.from(index: Int): List<IndexedValue<T>> {
 
 val MOD = 10L.pow(9).plus(7)
 
+private fun visitedArray(tree: Graph) = BooleanArray(tree.size())
+
 /******* utility functions ( above) *************/
-
-data class Route(val start: Int, val end: Int, val cost: Long = 0)
-
-val computedMinimumCostTill = MutableList(50001) { Long.MAX_VALUE }
-
-val routes = MutableList(50001) { mutableListOf<Route>() }
 
 fun main(args: Array<String>) {
     setDevelopmentFlag(args)
     val scan = scanner()
-    sandbox(1000000) {
+    sandbox {
         val (n, m) = scan.nextInts()
+        val tree = scan.toGraph(n, n - 1)
+        val (u, v) = findFarthestNodes(tree)
+        debugLog("$u, $v")
+        val distances = mapOf(
+            u to MutableList(tree.size()) { 0 },
+            v to MutableList(tree.size()) { 0 })
+        populateDistances(u, visitedArray(tree), tree, distances[u]!!, 0)
+        populateDistances(v, visitedArray(tree), tree, distances[v]!!, 0)
         for (i in 1..m) {
-            val (from, to, cost) = scan.nextInts()
-            routes[from].add(Route(from, to, cost.toLong()))
-            routes[to].add(Route(to, from, cost.toLong()))
+            val (from, numberOfTrips) = scan.nextInts()
+            val distance = travelledDistance(from, numberOfTrips, distances, u, v)
+            log(distance)
         }
-        log(getCost(n))
+
     }
 }
 
-fun getCost(end: Int): Long {
-    val start = 1
-    val visited = BooleanArray(50001)
-    val queue = PriorityQueue<Route>(compareBy { computedMinimumCostTill[it.end] })
-    computedMinimumCostTill[start] = 0
-    visitNeighbours(start, visited, queue)
-    while (queue.isNotEmpty()) {
-        val route = queue.poll()
-        if (route.end == end) {
-            break
-        }
-//        debugLog(route)
-        visitNeighbours(route.end, visited, queue)
 
-
-    }
-//    computedMinimumCostTill.withIndex().take(end+1).forEach { debugLog(it) }
-    //117
-    return if (computedMinimumCostTill[end] == Long.MAX_VALUE) -1 else computedMinimumCostTill[end]
+fun travelledDistance(
+    from: Int,
+    numberOfTrips: Int,
+    distances: Map<Int, MutableList<Int>>,
+    u: Int,
+    v: Int
+): Long {
+    val distanceFromUToV = distances[u]!![v].toLong()
+    val distance = max(distances[u]!![from], distances[v]!![from]).toLong()
+    return distance + (numberOfTrips.toLong() - 1) * distanceFromUToV
 }
 
-private fun visitNeighbours(
-    next: Int,
+
+fun findFarthestNodes(tree: Graph): Pair<Int, Int> {
+    val (u, _) = findFarthestNode(tree.root().id, visitedArray(tree), tree)
+    val (v, _) = findFarthestNode(u, visitedArray(tree), tree)
+    return Pair(u, v)
+}
+
+fun populateDistances(
+    to: Int,
     visited: BooleanArray,
-    queue: AbstractQueue<Route>
+    tree: Graph,
+    distances: MutableList<Int>,
+    distanceFromRoot: Int
 ) {
-    visited[next] = true
-    routes[next]
-        .filterNot { visited[it.end] }
-        .forEach { visit(it, queue) }
+    visited[to] = true
+    distances[to] = distanceFromRoot
+    tree[to].children
+        .filterNot { visited[it] }
+        .onEach {
+            populateDistances(
+                it,
+                visited,
+                tree,
+                distances,
+                distanceFromRoot + 1
+            )
+        }
 }
 
-private fun visit(it: Route, queue: AbstractQueue<Route>) {
-    val costTillNow = computedMinimumCostTill[it.start] + (it.cost - computedMinimumCostTill[it.start]).coerceAtLeast(0)
-    computedMinimumCostTill[it.end] = minOf(computedMinimumCostTill[it.end], costTillNow)
-    queue.add(it)
+
+fun findFarthestNode(
+    root: Int,
+    visited: BooleanArray,
+    tree: Graph
+): Pair<Int, Int> {
+    visited[root] = true
+    return tree[root].children
+        .filterNot { visited[it] }
+        .map { findFarthestNode(it, visited, tree) }
+        .map { Pair(it.first, it.second + 1) }
+        .maxBy { it.second } ?: Pair(root, 0)
 }
+
 
