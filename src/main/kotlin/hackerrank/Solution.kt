@@ -5,9 +5,9 @@ import java.io.BufferedWriter
 import java.io.File
 import java.io.OutputStreamWriter
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
-import kotlin.math.max
 import kotlin.system.measureTimeMillis
 
 
@@ -93,6 +93,13 @@ fun <T> completeWithin(timeoutInMilliSecs: Long = 5000, block: () -> T): T? {
     } catch (e: TimeoutException) {
         debugLog(Level.ERROR, "Failed end complete within $timeoutInMilliSecs ms")
         return null
+    } catch (e: ExecutionException) {
+        if (e.cause is AssertionError) {
+            debugLog(Level.ERROR, "Execution exception ${e.cause} ms")
+        } else {
+            throw e
+        }
+        return null
     }
 }
 
@@ -118,8 +125,16 @@ class Scan(private val reader: BufferedReader) {
         return reader.readLine()
     }
 
+    fun nextInt(): Int {
+        return this.nextInts().first()
+    }
+
     fun nextInts(): List<Int> {
         return this.nextLine().split(" ").map { it.trim().toInt() }
+    }
+
+    fun nextLong(): Long {
+        return this.nextLongs().first()
     }
 
     fun nextLongs(): List<Long> {
@@ -267,6 +282,11 @@ fun Long.modPow(power: Int, mod: Long): Long {
 
 }
 
+
+fun Int.pow(exponent: Int): Int {
+    return Math.pow(this.toDouble(), exponent.toDouble()).toInt()
+}
+
 fun Long.pow(exponent: Int): Long {
     return Math.pow(this.toDouble(), exponent.toDouble()).toLong()
 }
@@ -306,79 +326,85 @@ private fun visitedArray(tree: Graph) = BooleanArray(tree.size())
 fun main(args: Array<String>) {
     setDevelopmentFlag(args)
     val scan = scanner()
-    sandbox {
-        val (n, m) = scan.nextInts()
-        val tree = scan.toGraph(n, n - 1)
-        val (u, v) = findFarthestNodes(tree)
-        debugLog("$u, $v")
-        val distances = mapOf(
-            u to MutableList(tree.size()) { 0 },
-            v to MutableList(tree.size()) { 0 })
-        populateDistances(u, visitedArray(tree), tree, distances[u]!!, 0)
-        populateDistances(v, visitedArray(tree), tree, distances[v]!!, 0)
-        for (i in 1..m) {
-            val (from, numberOfTrips) = scan.nextInts()
-            val distance = travelledDistance(from, numberOfTrips, distances, u, v)
-            log(distance)
+    sandbox(5000) {
+        val t = scan.nextInt()
+        for (tItr in 1..t) {
+            val arrCount = scan.nextInt()
+            val arr = scan.nextLongs()
+            whatsNext(arr)
         }
 
     }
 }
 
 
-fun travelledDistance(
-    from: Int,
-    numberOfTrips: Int,
-    distances: Map<Int, MutableList<Int>>,
-    u: Int,
-    v: Int
-): Long {
-    val distanceFromUToV = distances[u]!![v].toLong()
-    val distance = max(distances[u]!![from], distances[v]!![from]).toLong()
-    return distance + (numberOfTrips.toLong() - 1) * distanceFromUToV
+fun whatsNext(input: List<Long>) {
+    val result = nextSmallestSameBitSetNumber(input)
+    log(result.size)
+    log(result.joinToString(" "))
 }
 
 
-fun findFarthestNodes(tree: Graph): Pair<Int, Int> {
-    val (u, _) = findFarthestNode(tree.root().id, visitedArray(tree), tree)
-    val (v, _) = findFarthestNode(u, visitedArray(tree), tree)
-    return Pair(u, v)
-}
-
-fun populateDistances(
-    to: Int,
-    visited: BooleanArray,
-    tree: Graph,
-    distances: MutableList<Int>,
-    distanceFromRoot: Int
-) {
-    visited[to] = true
-    distances[to] = distanceFromRoot
-    tree[to].children
-        .filterNot { visited[it] }
-        .onEach {
-            populateDistances(
-                it,
-                visited,
-                tree,
-                distances,
-                distanceFromRoot + 1
-            )
+fun nextSmallestSameBitSetNumber(input: List<Long>): List<Long> {
+    val mutableList = input.toMutableList()
+    when {
+        // 4 1111 -> 10111
+        input.size == 1 -> {
+            val ones = input[0]
+            mutableList[0] = 1
+            mutableList.add(1, 1)
+            mutableList.add(2, ones - 1)
         }
+        // 4,3 1111000 -> 10000111
+        input.size == 2 -> {
+            val ones = input[0]
+            val zeros = input[1]
+            mutableList[0] = 1
+            mutableList[1] = zeros + 1
+            mutableList.add(2, ones - 1)
+        }
+        // 4,3,2,1 1111000110 -> 1111001001
+        input.size % 2 == 0 -> {
+            val zeros = input[input.size - 1] // 1
+            val ones = input[input.size - 2] // 2
+            val trailingZeros = input[input.size - 3] // 3
+            // Next two lines, flipping zero to 1
+            if (trailingZeros - 1 > 0) {
+                mutableList[input.size - 3] = trailingZeros - 1
+                mutableList[input.size - 2] = 1
+                // remaining zeros
+                mutableList[input.size - 1] = zeros + 1
+                // remaining ones
+                mutableList.add(ones - 1)
+            } else {
+                mutableList[input.size - 4]++
+                mutableList[input.size - 3] = 0
+                mutableList[input.size - 2] = zeros + 1
+                // remaining zeros
+                mutableList[input.size - 1] = ones - 1
+            }
+
+        }
+        // 4,3,2 111100011 -> 111100101
+        else -> {
+            val ones = input[input.size - 1]
+            val trailingZeros = input[input.size - 2]
+            if (trailingZeros - 1 > 0) {
+                mutableList[input.size - 2] = trailingZeros - 1
+                mutableList[input.size - 1] = 1
+                mutableList.add(1)
+                mutableList.add(ones - 1)
+            } else {
+                mutableList[input.size - 3]++
+                mutableList[input.size - 2] = 1
+                mutableList[input.size - 1] = ones - 1
+            }
+        }
+
+    }
+    return mutableList.filter { it > 0 }
 }
 
 
-fun findFarthestNode(
-    root: Int,
-    visited: BooleanArray,
-    tree: Graph
-): Pair<Int, Int> {
-    visited[root] = true
-    return tree[root].children
-        .filterNot { visited[it] }
-        .map { findFarthestNode(it, visited, tree) }
-        .map { Pair(it.first, it.second + 1) }
-        .maxBy { it.second } ?: Pair(root, 0)
-}
 
 
