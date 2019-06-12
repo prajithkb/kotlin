@@ -1,5 +1,6 @@
 package main.kotlin.hackerrank
 
+import main.kotlin.SegmentTree
 import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.File
@@ -9,6 +10,7 @@ import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import kotlin.system.measureTimeMillis
+import kotlin.test.assertEquals
 
 
 /******* utility functions *************/
@@ -61,20 +63,21 @@ inline fun debugLog(level: Level = Level.DEBUG, block: () -> Any?) {
 
 /** Timed execution ****/
 
-data class Duration(val name: String, var duration: Long = 0) {
+class Duration(val name: String, var duration: Long = 0) {
     override fun toString(): String {
         return "Duration(name=$name, duration=$duration ms)"
     }
+
+    inline fun <T> timed(block: () -> T): T {
+        var value: T? = null
+        val time = measureTimeMillis {
+            value = block()
+        }
+        this.duration += time
+        return value!!
+    }
 }
 
-inline fun <T> Duration.timed(block: () -> T): T {
-    var value: T? = null
-    val time = measureTimeMillis {
-        value = block()
-    }
-    this.duration += time
-    return value!!
-}
 
 inline fun <T> withTimeToExecution(operationName: String = "Overall", block: () -> T): T {
     var value: T? = null
@@ -326,84 +329,22 @@ private fun visitedArray(tree: Graph) = BooleanArray(tree.size())
 fun main(args: Array<String>) {
     setDevelopmentFlag(args)
     val scan = scanner()
-    sandbox(5000) {
+    val outputScanner = Scan(File("/Users/kprajith/Desktop/REMOVE_THIS_output.txt").bufferedReader())
+    val LIMIT = 100005
+    sandbox(500000000) {
+        val segmentTree = withTimeToExecution("Init") { SegmentTree(IntRange(0, LIMIT)) }
         val t = scan.nextInt()
-        for (tItr in 1..t) {
-            val arrCount = scan.nextInt()
-            val arr = scan.nextLongs()
-            whatsNext(arr)
+        for (i in 1..t) {
+            val (d, m) = scan.nextInts()
+            segmentTree.update(d..LIMIT, m)
+            val max = segmentTree.query(0..LIMIT)
+            log(max)
+            assertEquals(outputScanner.nextInt(), max, "For $i")
         }
 
     }
 }
 
-
-fun whatsNext(input: List<Long>) {
-    val result = nextSmallestSameBitSetNumber(input)
-    log(result.size)
-    log(result.joinToString(" "))
-}
-
-
-fun nextSmallestSameBitSetNumber(input: List<Long>): List<Long> {
-    val mutableList = input.toMutableList()
-    when {
-        // 4 1111 -> 10111
-        input.size == 1 -> {
-            val ones = input[0]
-            mutableList[0] = 1
-            mutableList.add(1, 1)
-            mutableList.add(2, ones - 1)
-        }
-        // 4,3 1111000 -> 10000111
-        input.size == 2 -> {
-            val ones = input[0]
-            val zeros = input[1]
-            mutableList[0] = 1
-            mutableList[1] = zeros + 1
-            mutableList.add(2, ones - 1)
-        }
-        // 4,3,2,1 1111000110 -> 1111001001
-        input.size % 2 == 0 -> {
-            val zeros = input[input.size - 1] // 1
-            val ones = input[input.size - 2] // 2
-            val trailingZeros = input[input.size - 3] // 3
-            // Next two lines, flipping zero to 1
-            if (trailingZeros - 1 > 0) {
-                mutableList[input.size - 3] = trailingZeros - 1
-                mutableList[input.size - 2] = 1
-                // remaining zeros
-                mutableList[input.size - 1] = zeros + 1
-                // remaining ones
-                mutableList.add(ones - 1)
-            } else {
-                mutableList[input.size - 4]++
-                mutableList[input.size - 3] = 0
-                mutableList[input.size - 2] = zeros + 1
-                // remaining zeros
-                mutableList[input.size - 1] = ones - 1
-            }
-
-        }
-        // 4,3,2 111100011 -> 111100101
-        else -> {
-            val ones = input[input.size - 1]
-            val trailingZeros = input[input.size - 2]
-            if (trailingZeros - 1 > 0) {
-                mutableList[input.size - 2] = trailingZeros - 1
-                mutableList[input.size - 1] = 1
-                mutableList.add(1)
-                mutableList.add(ones - 1)
-            } else {
-                mutableList[input.size - 3]++
-                mutableList[input.size - 2] = 1
-                mutableList[input.size - 1] = ones - 1
-            }
-        }
-
-    }
-    return mutableList.filter { it > 0 }
-}
 
 
 
