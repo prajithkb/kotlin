@@ -2,7 +2,7 @@ package main.kotlin.graphs
 
 import java.io.File
 
-class GraphWiz(private val root: Node, val path: String = ".") {
+class GraphWiz(private val rootId: Int, path: String = ".") {
 
     companion object {
         val FILE_NAME = "graphwiz.dot"
@@ -34,7 +34,11 @@ class GraphWiz(private val root: Node, val path: String = ".") {
         }
     }
 
+    private val root = Node(rootId)
+
     private val nodes = mutableMapOf<Int, Node>()
+
+    private val edges = mutableMapOf<Pair<Int, Int>, Int>()
 
     private val file = File("$path/$FILE_NAME")
 
@@ -46,29 +50,33 @@ class GraphWiz(private val root: Node, val path: String = ".") {
     data class Node(val id: Int, val children: MutableSet<Int> = mutableSetOf())
 
 
-    fun add(node: Node, asAChildOf: Int) {
+    fun add(id: Int, asAChildOf: Int, edge: Int = 0) {
         val parent = nodes.getOrDefault(asAChildOf, Node(asAChildOf))
-        val child = nodes.getOrDefault(node.id, node)
-        parent.children.add(node.id)
+        val child = nodes.getOrDefault(id, Node(id))
+        parent.children.add(id)
         nodes[asAChildOf] = parent
-        nodes[node.id] = child
+        nodes[id] = child
+        edges[id to asAChildOf] = edge
+        edges[asAChildOf to id] = edge
+    }
+
+    fun add(node: Node, asAChildOf: Int) {
+        add(node.id, asAChildOf)
     }
 
     fun reset() {
         nodes.clear()
-        nodes.put(root.id, root)
+        nodes.put(rootId, Node(root.id))
     }
 
 
     fun toDotFile() {
-        start(file)
         toDotFile { bfs(root) }
-        stop(file)
     }
     private fun bfs(root: Node): String {
         var output = ""
         root.children.forEach {
-            output += "\"${root.id}\" -- \"$it\"\n"
+            output += "\"${root.id}\" -- \"$it\"[label=\" ${edges.getOrDefault(root.id to it, 0)}\"]\n"
             output += bfs(nodes[it]!!)
         }
         return output

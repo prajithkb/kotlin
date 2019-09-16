@@ -33,9 +33,11 @@ class DisjointSet<Item>(size: Int) {
     ) {
         val (toParentIndex, toParentSize) = findParentIndexPairOrCreate(to)
         val (fromParentIndex, fromParentSize) = findParentIndexPairOrCreate(from)
-        val newParentIndexSizePair = Pair(toParentIndex, toParentSize + fromParentSize)
-        parentIndexSizePairs[fromParentIndex] = newParentIndexSizePair
-        parentIndexSizePairs[toParentIndex] = newParentIndexSizePair
+        if (toParentIndex != fromParentIndex) {
+            val newParentIndexSizePair = Pair(toParentIndex, toParentSize + fromParentSize)
+            parentIndexSizePairs[fromParentIndex] = newParentIndexSizePair
+            parentIndexSizePairs[toParentIndex] = newParentIndexSizePair
+        }
     }
 
     private fun findParentIndexPairOrCreate(item: Element<Item>): Pair<Int, Int> {

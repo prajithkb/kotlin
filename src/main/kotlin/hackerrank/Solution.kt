@@ -1,10 +1,11 @@
 package main.kotlin.hackerrank
 
-import main.kotlin.SegmentTree
+import main.kotlin.graphs.GraphWiz
 import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.File
 import java.io.OutputStreamWriter
+import java.math.BigInteger
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
@@ -12,6 +13,109 @@ import java.util.concurrent.TimeoutException
 import kotlin.system.measureTimeMillis
 import kotlin.test.assertEquals
 
+class DisjointSet<Item>(size: Int) {
+
+    data class Element<Item>(
+        val value: Item?,
+        var index: Int
+    )
+
+    private val elements: Array<Element<Item>?> = arrayOfNulls(size)
+
+    private val parentIndexSizePairs: Array<Pair<Int, Int>?> = arrayOfNulls(size)
+
+
+    fun add(singleNode: Int) {
+        add(Element<Item>(null, singleNode))
+    }
+
+    fun add(singleNode: Element<Item>) {
+        findParentIndexOrCreate(singleNode)
+    }
+
+    fun union(
+        from: Int,
+        to: Int
+    ): Boolean {
+        return union(Element<Item>(null, from), Element<Item>(null, to))
+    }
+
+    fun union(
+        from: Element<Item>,
+        to: Element<Item>
+    ): Boolean {
+        val (toParentIndex, toParentSize) = findParentIndexPairOrCreate(to)
+        val (fromParentIndex, fromParentSize) = findParentIndexPairOrCreate(from)
+        if (toParentIndex != fromParentIndex) {
+            val newParentIndexSizePair = Pair(toParentIndex, toParentSize + fromParentSize)
+            parentIndexSizePairs[fromParentIndex] = newParentIndexSizePair
+            parentIndexSizePairs[toParentIndex] = newParentIndexSizePair
+            return true
+        } else {
+            return false
+        }
+    }
+
+    private fun findParentIndexPairOrCreate(item: Element<Item>): Pair<Int, Int> {
+        return findParentIndexOrCreate(item).let { parentIndexSizePairs[it] ?: Pair(it, 1) }
+    }
+
+    fun sizeOfConnectedComponents(from: Int): Int {
+        return find(from)?.let { parentIndexSizePairs[it]?.second } ?: 0
+
+    }
+
+    private fun sizeOfConnectedComponents(from: Element<Item>): Int {
+        return sizeOfConnectedComponents(from.index)
+    }
+
+    private fun findParentIndexOrCreate(item: Element<Item>): Int {
+        val itemRep = find(item.index)
+        if (itemRep == null) {
+            parentIndexSizePairs[item.index] = Pair(item.index, 1)
+            elements[item.index] = item
+        }
+        return itemRep ?: item.index
+    }
+
+
+    fun find(index: Int?): Int? {
+        if (index == null || parentIndexSizePairs.size <= index || parentIndexSizePairs[index] == null) {
+            return null
+        }
+        if (parentIndexSizePairs[index]?.first === index) {
+            return index
+        } else {
+            val result = find(parentIndexSizePairs[index]?.first)
+            return result?.also {
+                parentIndexSizePairs[index] = parentIndexSizePairs[it]
+            }
+        }
+    }
+
+    fun getConnectedComponents(): List<List<Int>> {
+        val connectedComponents = elements
+            .filterNotNull()
+            .map { element -> element.index }
+            .groupBy { i -> find(i) }
+        return connectedComponents.values.toList()
+    }
+
+    override fun toString(): String {
+        return getConnectedComponents().toString()
+    }
+
+    fun toDebugString(): String {
+        return "parentIndexSizePairs: ${parentIndexSizePairs
+            .withIndex()
+            .joinToString(",", "[", "]") { (index, pair) ->
+                "{index|$index:pair|$pair}"
+            }}\n" +
+                "elements: ${elements.filterNotNull().joinToString(",")}"
+    }
+
+
+}
 
 /******* utility functions *************/
 
@@ -114,10 +218,12 @@ fun setDevelopmentFlag(args: Array<String>) {
 
 
 /*** Read and Write ****/
+val OUTPUT_FILE = "/Users/kprajith/Desktop/REMOVE_THIS_output.txt"
+val INPUT_FILE = "/Users/kprajith/Desktop/REMOVE_THIS.txt"
 
 fun scanner(): Scan {
     if (devOverrides.readFromFile) {
-        return Scan(File("/Users/kprajith/Desktop/REMOVE_THIS.txt").bufferedReader())
+        return Scan(File(INPUT_FILE).bufferedReader())
     } else {
         return Scan(System.`in`.bufferedReader())
     }
@@ -207,10 +313,10 @@ class Graph(
         return nodes.joinToString("\n")
     }
 
-    fun asATree(root: Int): Graph {
+    fun asATree(root: Int, visitor: (child: Int, parent: Int) -> Unit = { _, _ -> }): Graph {
         val tree = Graph(numberOfNodes)
         tree.setRoot(root)
-        intoTree(this[root], Array(this.numberOfNodes + 1) { false }, tree)
+        intoTree(this[root], Array(this.numberOfNodes + 1) { false }, tree, visitor)
         tree.nodes.forEach {
             it.isLeaf = it.children.isEmpty()
         }
@@ -220,7 +326,8 @@ class Graph(
     private fun intoTree(
         node: Node,
         visited: Array<Boolean>,
-        tree: Graph
+        tree: Graph,
+        visitor: (child: Int, parent: Int) -> Unit
     ) {
         visited[node.id] = true
         node.children
@@ -229,7 +336,8 @@ class Graph(
             .forEach {
                 tree[node.id].children.add(it.id)
                 tree[it.id].parent = node.id
-                intoTree(it, visited, tree)
+                visitor(it.id, node.id)
+                intoTree(it, visited, tree, visitor)
             }
     }
 
@@ -246,6 +354,19 @@ fun Scan.toGraph(numberOfNodes: Int, numberOfEdges: Int = numberOfNodes - 1): Gr
         graph.connect(from, to)
     }
     return graph
+}
+
+
+class Validator {
+
+    fun validate(output: String) {
+        if (devOverrides.isDebug) {
+            val outputScanner = Scan(File(OUTPUT_FILE).bufferedReader())
+            assertEquals(outputScanner.nextLine(), output)
+            debugLog("SUCCESS")
+        }
+
+    }
 }
 
 /** Game theory ***/
@@ -326,24 +447,118 @@ private fun visitedArray(tree: Graph) = BooleanArray(tree.size())
 
 /******* utility functions ( above) *************/
 
+data class Road(val from: Int, val to: Int, val count: Long, val countAsPower: Int)
+
+const val MAX = 100001
+
 fun main(args: Array<String>) {
     setDevelopmentFlag(args)
-    val scan = scanner()
-    val outputScanner = Scan(File("/Users/kprajith/Desktop/REMOVE_THIS_output.txt").bufferedReader())
-    val LIMIT = 100005
-    sandbox(500000000) {
-        val segmentTree = withTimeToExecution("Init") { SegmentTree(IntRange(0, LIMIT)) }
-        val t = scan.nextInt()
-        for (i in 1..t) {
-            val (d, m) = scan.nextInts()
-            segmentTree.update(d..LIMIT, m)
-            val max = segmentTree.query(0..LIMIT)
-            log(max)
-            assertEquals(outputScanner.nextInt(), max, "For $i")
+    val inputScanner = scanner()
+    val validator = Validator()
+    sandbox(5000000) {
+        val (n, m) = inputScanner.nextInts()
+        val roads = mutableListOf<Road>()
+        (1..m).forEach {
+            val (from, to, count) = inputScanner.nextInts()
+            roads.add(Road(from, to, 2.toLong().pow(count), count))
         }
-
+        val result = roadsInHackerland(n, roads)
+        println(result)
+        validator.validate(result)
     }
 }
+
+fun roadsInHackerland(n: Int, roads: MutableList<Road>): String {
+    val (graph, edges) = createEdgesAndConnectedComponents(n, roads)
+    val tree = intoMinimalSpanningTree(graph, edges)
+    val sum = sumOfSums(tree, edges)
+    debugLog(sum)
+    return sum
+}
+
+private fun intoMinimalSpanningTree(
+    graph: Graph,
+    edges: MutableMap<Pair<Int, Int>, Pair<Long, Int>>
+): Graph {
+    val graphWiz = GraphWiz(1)
+    val tree = graph.asATree(1) { child, parent ->
+        val edge = edges.getOrDefault(child to parent, Pair(0L, 0))
+        graphWiz.add(child, parent, edge.second)
+    }
+    graphWiz.toDotFile()
+    return tree
+}
+
+private fun createEdgesAndConnectedComponents(
+    n: Int,
+    roads: MutableList<Road>
+): Pair<Graph, MutableMap<Pair<Int, Int>, Pair<Long, Int>>> {
+    val ds = DisjointSet<Int>(MAX)
+    val graph = Graph(n)
+    val edges = mutableMapOf<Pair<Int, Int>, Pair<Long, Int>>()
+    roads.sortedBy { it.count }
+        .forEach { (from, to, count, countAsPower) ->
+            if (ds.sizeOfConnectedComponents(from) < n) {
+                val added = ds.union(from, to)
+                if (added) {
+                    graph.connect(from, to)
+                    edges[from to to] = Pair(count, countAsPower)
+                    edges[to to from] = Pair(count, countAsPower)
+                }
+            }
+        }
+    return Pair(graph, edges)
+}
+
+val allEdges = mutableListOf<Result>()
+
+fun sumOfSums(
+    tree: Graph,
+    edges: MutableMap<Pair<Int, Int>, Pair<Long, Int>>
+): String {
+    val visited = visitedArray(tree)
+    sumOfSums(tree.root(), tree, visited, edges)
+    var sum = BigInteger.ZERO
+    val list = mutableListOf<Int>()
+    allEdges
+        .onEach { list.add(it.power) }
+        .filter { it.parents > 0 }
+        .map {
+            Triple(
+                BigInteger.valueOf(2).pow(it.power),
+                BigInteger.valueOf(it.children.toLong()),
+                BigInteger.valueOf(it.parents.toLong())
+            )
+        }
+        .map { it.first.multiply(it.second).multiply(it.third) }
+        .onEach { sum = sum.add(it) }
+    return sum.toString(2)
+}
+
+data class Result(val value: Long = 0, val power: Int = 0, val children: Int = 0, val parents: Int = 0)
+
+fun sumOfSums(
+    root: Node,
+    tree: Graph,
+    visited: BooleanArray,
+    edges: MutableMap<Pair<Int, Int>, Pair<Long, Int>>
+): Result {
+    val currentNodeId = root.id
+    if (visited[currentNodeId]) {
+        return Result()
+    }
+    visited[currentNodeId] = true
+    val results = root.children
+        .filterNot { visited[it] }
+        .map { tree[it] }
+        .map { sumOfSums(it, tree, visited, edges) }
+    val numberOfChildren = results.sumBy { it.children } + 1
+    val (value, power) = edges.getOrDefault(currentNodeId to root.parent, Pair(-1L, -1))
+    val r = Result(value, power, numberOfChildren, tree.size() - 1 - numberOfChildren)
+    allEdges.add(r)
+    return r
+}
+
 
 
 
