@@ -1,11 +1,9 @@
 package main.kotlin.hackerrank
 
-import main.kotlin.graphs.GraphWiz
 import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.File
 import java.io.OutputStreamWriter
-import java.math.BigInteger
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
@@ -146,7 +144,10 @@ fun log(message: Any?, level: Level) {
     }
 }
 
+val outputStringBuilder = StringBuilder()
+
 fun log(message: Any?) {
+    outputStringBuilder.append(message)
     fastPrintln(message)
 }
 
@@ -218,8 +219,8 @@ fun setDevelopmentFlag(args: Array<String>) {
 
 
 /*** Read and Write ****/
-val OUTPUT_FILE = "/Users/kprajith/Desktop/REMOVE_THIS_output.txt"
-val INPUT_FILE = "/Users/kprajith/Desktop/REMOVE_THIS.txt"
+val OUTPUT_FILE = "/Users/kprajith/Desktop/Hackerrank_Output.txt"
+val INPUT_FILE = "/Users/kprajith/Desktop/Hackerrank_Input.txt"
 
 fun scanner(): Scan {
     if (devOverrides.readFromFile) {
@@ -252,9 +253,12 @@ class Scan(private val reader: BufferedReader) {
 }
 
 val writer = BufferedWriter(OutputStreamWriter(System.out))
+val writers = listOf(writer)
 fun fastPrintln(message: Any?) {
-    writer.write(message?.toString())
-    writer.newLine()
+    writers.forEach {
+        it.write(message?.toString())
+        it.newLine()
+    }
 }
 
 val isDebug =
@@ -262,14 +266,16 @@ val isDebug =
 val defaultTimeOut = if (isDebug) 50000000L else 5000L
 inline fun sandbox(within: Long = defaultTimeOut, crossinline block: () -> Any) {
     debugLog("Running with timeout of $within")
-    val within =
-        writer.use {
-            completeWithin(within) {
-                withTimeToExecution("main") {
-                    block()
-                }
+    val validator = Validator(outputStringBuilder)
+    writer.use {
+        completeWithin(within) {
+            withTimeToExecution("main") {
+                block()
             }
         }
+        validator.validate()
+    }
+
 }
 
 /** Graphs ***/
@@ -357,12 +363,20 @@ fun Scan.toGraph(numberOfNodes: Int, numberOfEdges: Int = numberOfNodes - 1): Gr
 }
 
 
-class Validator {
+class Validator(private val outputStringBuilder: StringBuilder) {
 
-    fun validate(output: String) {
+    val outputScanner = Scan(File(OUTPUT_FILE).bufferedReader())
+
+    private fun validate(output: String) {
+        assertEquals(outputScanner.nextLine(), output)
+    }
+
+    fun validate() {
         if (devOverrides.isDebug) {
-            val outputScanner = Scan(File(OUTPUT_FILE).bufferedReader())
-            assertEquals(outputScanner.nextLine(), output)
+            val lines = outputStringBuilder.toString().split("\n")
+            lines.forEach {
+                validate(it)
+            }
             debugLog("SUCCESS")
         }
 
@@ -454,113 +468,14 @@ const val MAX = 100001
 fun main(args: Array<String>) {
     setDevelopmentFlag(args)
     val inputScanner = scanner()
-    val validator = Validator()
-    sandbox(5000000) {
-        val (n, m) = inputScanner.nextInts()
-        val roads = mutableListOf<Road>()
-        (1..m).forEach {
-            val (from, to, count) = inputScanner.nextInts()
-            roads.add(Road(from, to, 2.toLong().pow(count), count))
-        }
-        val result = roadsInHackerland(n, roads)
-        println(result)
-        validator.validate(result)
-    }
-}
-
-fun roadsInHackerland(n: Int, roads: MutableList<Road>): String {
-    val (graph, edges) = createEdgesAndConnectedComponents(n, roads)
-    val tree = intoMinimalSpanningTree(graph, edges)
-    val sum = sumOfSums(tree, edges)
-    debugLog(sum)
-    return sum
-}
-
-private fun intoMinimalSpanningTree(
-    graph: Graph,
-    edges: MutableMap<Pair<Int, Int>, Pair<Long, Int>>
-): Graph {
-    val graphWiz = GraphWiz(1)
-    val tree = graph.asATree(1) { child, parent ->
-        val edge = edges.getOrDefault(child to parent, Pair(0L, 0))
-        graphWiz.add(child, parent, edge.second)
-    }
-    graphWiz.toDotFile()
-    return tree
-}
-
-private fun createEdgesAndConnectedComponents(
-    n: Int,
-    roads: MutableList<Road>
-): Pair<Graph, MutableMap<Pair<Int, Int>, Pair<Long, Int>>> {
-    val ds = DisjointSet<Int>(MAX)
-    val graph = Graph(n)
-    val edges = mutableMapOf<Pair<Int, Int>, Pair<Long, Int>>()
-    roads.sortedBy { it.count }
-        .forEach { (from, to, count, countAsPower) ->
-            if (ds.sizeOfConnectedComponents(from) < n) {
-                val added = ds.union(from, to)
-                if (added) {
-                    graph.connect(from, to)
-                    edges[from to to] = Pair(count, countAsPower)
-                    edges[to to from] = Pair(count, countAsPower)
-                }
+    sandbox {
+        val (height, width) = inputScanner.nextInts()
+        val cubeSizes = Array(height) { IntArray(width) }
+        for (i in 0 until height) {
+            for (j in 0 until width) {
+                cubeSizes[i][j] = inputScanner.nextInt()
             }
         }
-    return Pair(graph, edges)
-}
-
-val allEdges = mutableListOf<Result>()
-
-fun sumOfSums(
-    tree: Graph,
-    edges: MutableMap<Pair<Int, Int>, Pair<Long, Int>>
-): String {
-    val visited = visitedArray(tree)
-    sumOfSums(tree.root(), tree, visited, edges)
-    var sum = BigInteger.ZERO
-    val list = mutableListOf<Int>()
-    allEdges
-        .onEach { list.add(it.power) }
-        .filter { it.parents > 0 }
-        .map {
-            Triple(
-                BigInteger.valueOf(2).pow(it.power),
-                BigInteger.valueOf(it.children.toLong()),
-                BigInteger.valueOf(it.parents.toLong())
-            )
-        }
-        .map { it.first.multiply(it.second).multiply(it.third) }
-        .onEach { sum = sum.add(it) }
-    return sum.toString(2)
-}
-
-data class Result(val value: Long = 0, val power: Int = 0, val children: Int = 0, val parents: Int = 0)
-
-fun sumOfSums(
-    root: Node,
-    tree: Graph,
-    visited: BooleanArray,
-    edges: MutableMap<Pair<Int, Int>, Pair<Long, Int>>
-): Result {
-    val currentNodeId = root.id
-    if (visited[currentNodeId]) {
-        return Result()
+        log(6)
     }
-    visited[currentNodeId] = true
-    val results = root.children
-        .filterNot { visited[it] }
-        .map { tree[it] }
-        .map { sumOfSums(it, tree, visited, edges) }
-    val numberOfChildren = results.sumBy { it.children } + 1
-    val (value, power) = edges.getOrDefault(currentNodeId to root.parent, Pair(-1L, -1))
-    val r = Result(value, power, numberOfChildren, tree.size() - 1 - numberOfChildren)
-    allEdges.add(r)
-    return r
 }
-
-
-
-
-
-
