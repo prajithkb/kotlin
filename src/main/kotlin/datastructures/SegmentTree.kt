@@ -3,7 +3,6 @@ package main.kotlin
 import main.kotlin.SegmentTree.Companion.INVALID
 import main.kotlin.graphs.GraphWiz
 import main.kotlin.hackerrank.*
-import kotlin.test.assertEquals
 
 class SegmentTree(private val overallRange: IntRange) {
 
@@ -168,28 +167,28 @@ val graphWizDuration = Duration("GraphWiz")
 fun main(args: Array<String>) {
     setDevelopmentFlag(listOf("test").toTypedArray())
     sandbox(500000000) {
-        val inputs = mutableListOf(7, 8, 1, 4, 3, 9, 8, 2, 6, 4, 10)
-        log(inputs)
-        val segmentTree = withTimeToExecution("Init") { SegmentTree(IntRange(0, inputs.size)) }
-        withTimeToExecution("Update") {
-            inputs.forEachIndexed { i, v ->
-                segmentTree.update(i, v)
-            }
-        }
-        val ranges = listOf(0..0, 2..7, 3..6, 5..10, 6..9)
-        withTimeToExecution("QueryAndUpdateWithValidation") {
-            ranges.forEach {
-                validateQuery(it, inputs, segmentTree)
-            }
-            listOf(2..7, 3..9, 4..5, 1..10).forEach {
-                update(it, inputs, segmentTree, 1)
-            }
-            debugLog(inputs)
-            ranges.forEach {
-                validateQuery(it, inputs, segmentTree)
-            }
-            listOf(queryDuration, updateDuration, graphWizDuration).forEach { debugLog(it) }
-        }
+//        val inputs = mutableListOf(7, 8, 1, 4, 3, 9, 8, 2, 6, 4, 10)
+//        log(inputs)
+//        val segmentTree = withTimeToExecution("Init") { SegmentTree(IntRange(0, inputs.size)) }
+//        withTimeToExecution("Update") {
+//            inputs.forEachIndexed { i, v ->
+//                segmentTree.update(i, v)
+//            }
+//        }
+//        val ranges = listOf(0..0, 2..7, 3..6, 5..10, 6..9)
+//        withTimeToExecution("QueryAndUpdateWithValidation") {
+//            ranges.forEach {
+//                validateQuery(it, inputs, segmentTree)
+//            }
+//            listOf(2..7, 3..9, 4..5, 1..10).forEach {
+//                update(it, inputs, segmentTree, 1)
+//            }
+//            debugLog(inputs)
+//            ranges.forEach {
+//                validateQuery(it, inputs, segmentTree)
+//            }
+//            listOf(queryDuration, updateDuration, graphWizDuration).forEach { debugLog(it) }
+//        }
     }
 }
 
@@ -207,11 +206,11 @@ fun validateQuery(
     segmentTree: SegmentTree
 ) {
     val max = queryDuration.timed { segmentTree.query(range) }
-    debugLog("Validating query for $range")
+//    debugLog("Validating query for $range")
     graphWizDuration.timed {
         segmentTree.asGraphWizDotFile()
     }
-    assertEquals(bruteForceQuery(inputs, range), max, "For $range")
+//    assertEquals(bruteForceQuery(inputs, range), max, "For $range")
 }
 
 fun update(
@@ -220,7 +219,7 @@ fun update(
     segmentTree: SegmentTree,
     value: Int
 ) {
-    debugLog("updating for $range, with $value")
+//    debugLog("updating for $range, with $value")
     updateDuration.timed { segmentTree.update(range, value) }
     bruteForceUpdate(inputs, range, value)
 }
